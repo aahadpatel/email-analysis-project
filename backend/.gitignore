@@ -1,0 +1,15 @@
+# backend/.gitignore
+venv/
+*.pyc
+__pycache__/
+instance/
+.pytest_cache/
+.coverage
+.env
+htmlcov/
+dist/
+build/
+*.egg-info/
+.idea/
+*.swp
+*~
