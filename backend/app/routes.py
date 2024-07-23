@@ -3,6 +3,10 @@ from flask import current_app, Blueprint, jsonify, request, url_for, session
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from .email_analyzer import process_emails
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from threading import Thread
+import uuid
+
 
 if os.getenv('OAUTHLIB_INSECURE_TRANSPORT') == '1':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -63,21 +67,37 @@ def oauth2callback():
 @bp.route('/analyze_emails', methods=['GET'])
 def analyze_emails():
     if 'credentials' not in session:
-        current_app.logger.error("Attempt to analyze emails without credentials")
         return jsonify({"error": "Not authenticated"}), 401
 
-    try:
-        credentials = Credentials(**session['credentials'])
-        current_app.logger.info("Credentials retrieved from session")
+    credentials = Credentials(**session['credentials'])
+
+    def analyze_with_timeout():
+        try:
+            return process_emails(credentials)
+        except Exception as e:
+            current_app.logger.error(f"Error in email analysis: {str(e)}")
+            current_app.logger.error(traceback.format_exc())
+            return None, None, str(e)
+
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(analyze_with_timeout)
+        try:
+            num_startups, csv_path, error = future.result(timeout=60)  # 60-second timeout
+            if error:
+                return jsonify({"error": "Email analysis failed", "details": error}), 500
+            if num_startups is None or csv_path is None:
+                return jsonify({"error": "Email analysis returned unexpected results"}), 500
+            return jsonify({
+                "num_startups": num_startups,
+                "csv_path": csv_path,
+                "message": f"Analysis complete. Found {num_startups} startup-related emails."
+            })
+        except TimeoutError:
+            return jsonify({
+                "error": "Analysis timed out",
+                "message": "The email analysis took too long. Try analyzing fewer emails or optimize the process."
+            }), 504
         
-        num_emails = process_emails(credentials)
-        current_app.logger.info(f"Email analysis complete. Analyzed {num_emails} emails")
-        
-        return jsonify({"num_emails": num_emails, "csv_path": "path/to/your/csv/file.csv"})
-    except Exception as e:
-        current_app.logger.error(f"Error in analyze_emails: {str(e)}", exc_info=True)
-        return jsonify({"error": "An error occurred while analyzing emails"}), 500
-     
 def credentials_to_dict(credentials):
     return {'token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -96,3 +116,41 @@ def catch_all(path):
 def check_auth():
     is_authenticated = 'credentials' in session
     return jsonify({"is_authenticated": is_authenticated})
+
+# Global dictionary to store analysis tasks
+analysis_tasks = {}
+
+@bp.route('/start_analysis', methods=['POST'])
+def start_analysis():
+    if 'credentials' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    credentials = Credentials(**session['credentials'])
+    task_id = str(uuid.uuid4())
+
+    def run_analysis():
+        try:
+            num_startups, csv_path = process_emails(credentials)
+            analysis_tasks[task_id] = {
+                "status": "completed",
+                "num_startups": num_startups,
+                "csv_path": csv_path
+            }
+        except Exception as e:
+            current_app.logger.error(f"Error in email analysis: {str(e)}")
+            analysis_tasks[task_id] = {
+                "status": "error",
+                "error": str(e)
+            }
+
+    analysis_tasks[task_id] = {"status": "in_progress"}
+    Thread(target=run_analysis).start()
+
+    return jsonify({"task_id": task_id, "status": "Analysis started"})
+
+@bp.route('/analysis_progress/<task_id>', methods=['GET'])
+def analysis_progress(task_id):
+    task = analysis_tasks.get(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    return jsonify(task)

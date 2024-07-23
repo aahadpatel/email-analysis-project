@@ -11,7 +11,8 @@ const api = axios.create({
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisStatus, setAnalysisStatus] = useState(null);
+  const [analysisError, setAnalysisError] = useState(null);
 
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -44,12 +45,42 @@ function App() {
     }
   };
 
-  const handleAnalyzeEmails = async () => {
+  const handleStartAnalysis = async () => {
     try {
-      const response = await api.get("/analyze_emails");
-      setAnalysisResult(response.data);
+      setAnalysisStatus("starting");
+      setAnalysisError(null);
+      const response = await api.post("/start_analysis");
+      const taskId = response.data.task_id;
+      setAnalysisStatus("in_progress");
+      checkAnalysisProgress(taskId);
     } catch (error) {
-      console.error("Error analyzing emails:", error);
+      console.error("Error starting analysis:", error);
+      setAnalysisError("Failed to start analysis: " + error.message);
+      setAnalysisStatus(null);
+    }
+  };
+
+  const checkAnalysisProgress = async (taskId) => {
+    try {
+      const response = await api.get(`/analysis_progress/${taskId}`);
+      const status = response.data.status;
+      setAnalysisStatus(status);
+
+      if (status === "in_progress") {
+        // Check again in 2 seconds
+        setTimeout(() => checkAnalysisProgress(taskId), 2000);
+      } else if (status === "completed") {
+        setAnalysisStatus(
+          `Analysis complete. Found ${response.data.num_startups} startup-related emails.`
+        );
+      } else if (status === "error") {
+        setAnalysisError("Analysis failed: " + response.data.error);
+        setAnalysisStatus(null);
+      }
+    } catch (error) {
+      console.error("Error checking analysis progress:", error);
+      setAnalysisError("Failed to check progress: " + error.message);
+      setAnalysisStatus(null);
     }
   };
 
@@ -65,8 +96,9 @@ function App() {
             <Login onLogin={handleLogin} onTestCORS={testCORS} />
           ) : (
             <Dashboard
-              onAnalyze={handleAnalyzeEmails}
-              analysisResult={analysisResult}
+              onStartAnalysis={handleStartAnalysis}
+              analysisStatus={analysisStatus}
+              analysisError={analysisError}
             />
           )}
         </div>
