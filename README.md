@@ -48,7 +48,7 @@ The Email Scraper Web App is a powerful tool designed to streamline the process 
 
 5. Run the Flask server:
    ```bash
-   python app.py
+   flask run --port=INSERT_PORT
    ```
 
 ### Frontend
