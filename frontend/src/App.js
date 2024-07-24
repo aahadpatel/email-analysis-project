@@ -12,7 +12,8 @@ const api = axios.create({
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [analysisStatus, setAnalysisStatus] = useState(null);
-  const [analysisError, setAnalysisError] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -48,38 +49,34 @@ function App() {
   const handleStartAnalysis = async () => {
     try {
       setAnalysisStatus("starting");
-      setAnalysisError(null);
+      setError(null);
       const response = await api.post("/start_analysis");
-      const taskId = response.data.task_id;
       setAnalysisStatus("in_progress");
-      checkAnalysisProgress(taskId);
+      checkProgress();
     } catch (error) {
       console.error("Error starting analysis:", error);
-      setAnalysisError("Failed to start analysis: " + error.message);
+      setError("Failed to start analysis: " + error.message);
       setAnalysisStatus(null);
     }
   };
 
-  const checkAnalysisProgress = async (taskId) => {
+  const checkProgress = async () => {
     try {
-      const response = await api.get(`/analysis_progress/${taskId}`);
-      const status = response.data.status;
-      setAnalysisStatus(status);
+      const response = await api.get("/check_progress");
+      setProgress(response.data);
 
-      if (status === "in_progress") {
-        // Check again in 2 seconds
-        setTimeout(() => checkAnalysisProgress(taskId), 2000);
-      } else if (status === "completed") {
-        setAnalysisStatus(
-          `Analysis complete. Found ${response.data.num_startups} startup-related emails.`
-        );
-      } else if (status === "error") {
-        setAnalysisError("Analysis failed: " + response.data.error);
-        setAnalysisStatus(null);
+      if (response.data.status === "Completed") {
+        setAnalysisStatus("completed");
+      } else if (response.data.status === "Error") {
+        setAnalysisStatus("error");
+        setError("Analysis failed");
+      } else {
+        // Schedule next progress check in 2 seconds
+        setTimeout(checkProgress, 2000);
       }
     } catch (error) {
-      console.error("Error checking analysis progress:", error);
-      setAnalysisError("Failed to check progress: " + error.message);
+      console.error("Error checking progress:", error);
+      setError("Failed to check progress: " + error.message);
       setAnalysisStatus(null);
     }
   };
@@ -98,7 +95,8 @@ function App() {
             <Dashboard
               onStartAnalysis={handleStartAnalysis}
               analysisStatus={analysisStatus}
-              analysisError={analysisError}
+              progress={progress}
+              error={error}
             />
           )}
         </div>

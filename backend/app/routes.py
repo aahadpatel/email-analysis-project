@@ -1,11 +1,16 @@
 import os
+import threading
 from flask import current_app, Blueprint, jsonify, request, url_for, session
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from .email_analyzer import process_emails
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from threading import Thread
 import uuid
+import asyncio
+from .email_analyzer import process_emails, progress
+import threading
+import asyncio
+
 
 
 if os.getenv('OAUTHLIB_INSECURE_TRANSPORT') == '1':
@@ -65,39 +70,29 @@ def oauth2callback():
         return jsonify({"error": "Authentication failed", "details": str(e)}), 400
 
 @bp.route('/analyze_emails', methods=['GET'])
-def analyze_emails():
+async def analyze_emails():
     if 'credentials' not in session:
         return jsonify({"error": "Not authenticated"}), 401
 
     credentials = Credentials(**session['credentials'])
 
-    def analyze_with_timeout():
-        try:
-            return process_emails(credentials)
-        except Exception as e:
-            current_app.logger.error(f"Error in email analysis: {str(e)}")
-            current_app.logger.error(traceback.format_exc())
-            return None, None, str(e)
-
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(analyze_with_timeout)
-        try:
-            num_startups, csv_path, error = future.result(timeout=60)  # 60-second timeout
-            if error:
-                return jsonify({"error": "Email analysis failed", "details": error}), 500
-            if num_startups is None or csv_path is None:
-                return jsonify({"error": "Email analysis returned unexpected results"}), 500
-            return jsonify({
-                "num_startups": num_startups,
-                "csv_path": csv_path,
-                "message": f"Analysis complete. Found {num_startups} startup-related emails."
-            })
-        except TimeoutError:
-            return jsonify({
-                "error": "Analysis timed out",
-                "message": "The email analysis took too long. Try analyzing fewer emails or optimize the process."
-            }), 504
-        
+    try:
+        num_startups, csv_path, error = await process_emails(credentials)
+        if error:
+            return jsonify({"error": "Email analysis failed", "details": error}), 500
+        if num_startups is None or csv_path is None:
+            return jsonify({"error": "Email analysis returned unexpected results"}), 500
+        return jsonify({
+            "num_startups": num_startups,
+            "csv_path": csv_path,
+            "message": f"Analysis complete. Found {num_startups} startup-related emails."
+        })
+    except Exception as e:
+        return jsonify({
+            "error": "Analysis failed",
+            "message": str(e)
+        }), 500
+    
 def credentials_to_dict(credentials):
     return {'token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -126,27 +121,35 @@ def start_analysis():
         return jsonify({"error": "Not authenticated"}), 401
 
     credentials = Credentials(**session['credentials'])
-    task_id = str(uuid.uuid4())
+    
+    # Reset progress
+    progress.update(total_emails=0, processed_emails=0, total_companies=0, analyzed_companies=0, status="Starting")
+    
+    # Start the analysis in a background thread
+    thread = threading.Thread(target=run_analysis, args=(current_app._get_current_object(), credentials))
+    thread.start()
+    
+    return jsonify({"message": "Analysis started"})
 
-    def run_analysis():
+def run_analysis(app, credentials):
+    with app.app_context():
+        current_app.logger.info("Starting analysis...")
         try:
-            num_startups, csv_path = process_emails(credentials)
-            analysis_tasks[task_id] = {
-                "status": "completed",
-                "num_startups": num_startups,
-                "csv_path": csv_path
-            }
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            current_app.logger.info("Created new event loop")
+            num_startups, csv_path, error, _ = loop.run_until_complete(process_emails(credentials))
+            current_app.logger.info(f"Analysis completed. num_startups: {num_startups}, csv_path: {csv_path}, error: {error}")
+            if error:
+                current_app.logger.error(f"Error in email analysis: {error}")
+            else:
+                current_app.logger.info(f"Analysis complete. Found {num_startups} startup-related emails.")
         except Exception as e:
-            current_app.logger.error(f"Error in email analysis: {str(e)}")
-            analysis_tasks[task_id] = {
-                "status": "error",
-                "error": str(e)
-            }
+            current_app.logger.error(f"Unexpected error in email analysis: {str(e)}")
+        finally:
+            loop.close()
+            current_app.logger.info("Event loop closed")
 
-    analysis_tasks[task_id] = {"status": "in_progress"}
-    Thread(target=run_analysis).start()
-
-    return jsonify({"task_id": task_id, "status": "Analysis started"})
 
 @bp.route('/analysis_progress/<task_id>', methods=['GET'])
 def analysis_progress(task_id):
@@ -154,3 +157,15 @@ def analysis_progress(task_id):
     if not task:
         return jsonify({"error": "Task not found"}), 404
     return jsonify(task)
+
+@bp.route('/check_progress', methods=['GET'])
+def check_progress():
+    global progress
+    return jsonify({
+        'total_emails': progress.total_emails,
+        'processed_emails': progress.processed_emails,
+        'total_companies': progress.total_companies,
+        'analyzed_companies': progress.analyzed_companies,
+        'status': progress.status,
+        'num_startups': len(progress.startup_companies)
+    })

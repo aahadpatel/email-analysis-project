@@ -1,9 +1,6 @@
 import React from "react";
 
-function Dashboard({ onStartAnalysis, analysisStatus, analysisError }) {
-  const isAnalyzing =
-    analysisStatus === "starting" || analysisStatus === "in_progress";
-
+function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold mb-4">
@@ -11,45 +8,54 @@ function Dashboard({ onStartAnalysis, analysisStatus, analysisError }) {
       </h2>
       <button
         onClick={onStartAnalysis}
-        disabled={isAnalyzing}
-        className={`w-full py-2 px-4 ${
-          isAnalyzing ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
-        } text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75`}
+        disabled={
+          analysisStatus === "starting" || analysisStatus === "in_progress"
+        }
+        className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"
       >
-        {isAnalyzing ? "Analysis in Progress..." : "Analyze Emails"}
+        {analysisStatus === "starting" || analysisStatus === "in_progress"
+          ? "Analysis in Progress..."
+          : "Analyze Emails"}
       </button>
-      {analysisStatus && (
+      {progress && (
         <div className="mt-6 space-y-4">
           <p className="text-lg">
-            Status: <span className="font-semibold">{analysisStatus}</span>
+            Status: <span className="font-semibold">{progress.status}</span>
           </p>
-          {analysisStatus.includes("Analysis complete") && (
-            <>
-              <p className="text-lg">
-                Number of startup-related emails found:{" "}
-                <span className="font-semibold">
-                  {
-                    analysisStatus.match(
-                      /Found (\d+) startup-related emails/
-                    )[1]
-                  }
-                </span>
-              </p>
-              {/* You might want to add a way to display or download the CSV file */}
-            </>
-          )}
+          <p className="text-lg">
+            Processed Emails:{" "}
+            <span className="font-semibold">
+              {progress.processed_emails} / {progress.total_emails}
+            </span>
+          </p>
+          <p className="text-lg">
+            Analyzed Companies:{" "}
+            <span className="font-semibold">
+              {progress.analyzed_companies} / {progress.total_companies}
+            </span>
+          </p>
         </div>
       )}
-      {analysisError && (
+      {error && (
         <div
           className="mt-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
           role="alert"
         >
           <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{analysisError}</span>
+          <span className="block sm:inline">{error}</span>
         </div>
       )}
-      {/* You might want to add a way to display startup details here once the analysis is complete */}
+      {analysisStatus === "completed" && (
+        <div
+          className="mt-6 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
+          role="alert"
+        >
+          <strong className="font-bold">Analysis Completed: </strong>
+          <span className="block sm:inline">
+            Check your CSV file for results.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
