@@ -6,7 +6,7 @@ The Email Scraper Web App is a powerful tool designed to streamline the process 
 
 ## Features
 
-- **Email Scraping:** Currently extracts email information from the latest ten emails in your gmail inbox including date, subject, sender, and the first 100 characters from the email body. The long term goal would be for us to use this tool to analyze each email using existing LLMs.
+- **Email Scraping:** Currently extracts email information from the latest ten emails in your gmail inbox including date, subject, sender, and part of the email body. Using GPT to analyze emails. In this case, GPT is attempting to determine if our fund has interacted with a startup. Output is in a CSV.
 - **Data Extraction:** Automatically parse and organize data into structured formats.
 - **Frontend Interface:** Intuitive React-based UI for easy interaction and visualization of extracted data.
 - **Backend Processing:** Robust Flask-based server handling data extraction and processing tasks.
@@ -24,7 +24,7 @@ The Email Scraper Web App is a powerful tool designed to streamline the process 
 1. Clone the repository:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/aahadpatel/email-analysis-project
    ```
 
 2. Navigate to the `backend` directory:
