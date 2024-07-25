@@ -9,20 +9,22 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
   console.log("Dashboard render - error:", error);
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold mb-4">
-        Welcome! You're authenticated.
-      </h2>
-      <button
-        onClick={onStartAnalysis}
-        disabled={
-          analysisStatus === "starting" || analysisStatus === "in_progress"
-        }
-        className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"
-      >
-        {analysisStatus === "starting" || analysisStatus === "in_progress"
-          ? "Analysis in Progress..."
-          : "Analyze Emails"}
-      </button>
+      <div className="justify-center items-center space-y-4">
+        <h2 className="text-center text-2xl font-semibold mb-4">
+          Welcome! You're authenticated.
+        </h2>
+        <button
+          onClick={onStartAnalysis}
+          disabled={
+            analysisStatus === "starting" || analysisStatus === "in_progress"
+          }
+          className="w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"
+        >
+          {analysisStatus === "starting" || analysisStatus === "in_progress"
+            ? "Analysis in Progress..."
+            : "Analyze Emails"}
+        </button>
+      </div>
       {progress && (
         <div className="mt-6 space-y-4">
           <p className="text-lg">

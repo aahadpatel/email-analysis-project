@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 import csv
 from datetime import datetime
+import dateutil.parser
 import base64
 import re
 import logging
@@ -55,27 +56,30 @@ async def analyze_emails(credentials):
     progress_tracker.update(status="Fetching emails")
     
     service = build('gmail', 'v1', credentials=credentials)
-    results = service.users().messages().list(userId='me', maxResults=10).execute()
-    messages = results.get('messages', [])
     
-    current_app.logger.info(f"Fetched {len(messages)} emails")
-    progress_tracker.update(total_emails=len(messages), status="Processing emails", processed_emails=0)
+    # Fetch threads instead of individual messages
+    results = service.users().threads().list(userId='me', maxResults=10).execute()
+    threads = results.get('threads', [])
     
-    companies = defaultdict(lambda: {"emails": [], "interactions": 0})
+    current_app.logger.info(f"Fetched {len(threads)} email threads")
+    progress_tracker.update(total_emails=len(threads), status="Processing email threads", processed_emails=0)
+    
+    companies = defaultdict(lambda: {"threads": [], "interactions": 0})
 
-    for i, message in enumerate(messages, 1):
-        current_app.logger.info(f"Processing email {i}/{len(messages)}")
-        msg = service.users().messages().get(userId='me', id=message['id']).execute()
-        email_data = extract_email_data(msg)
-        company_name = extract_company_name(email_data)
+    for i, thread in enumerate(threads, 1):
+        current_app.logger.info(f"Processing thread {i}/{len(threads)}")
+        thread_data = service.users().threads().get(userId='me', id=thread['id']).execute()
+        thread_emails = [extract_email_data(msg) for msg in thread_data['messages']]
+        
+        company_name = extract_company_name(thread_emails[0])  # Use the first email to determine the company
         
         if company_name:
-            companies[company_name]["emails"].append(email_data)
+            companies[company_name]["threads"].append(thread_emails)
             companies[company_name]["interactions"] += 1
         
-        progress_tracker.update(processed_emails=i, status=f"Processing email {i}/{len(messages)}")
+        progress_tracker.update(processed_emails=i, status=f"Processing thread {i}/{len(threads)}")
 
-    current_app.logger.info(f"Processed all emails. Found {len(companies)} companies")
+    current_app.logger.info(f"Processed all threads. Found {len(companies)} companies")
     progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
     
     startup_companies = await analyze_companies(companies)
@@ -103,13 +107,30 @@ def extract_email_data(msg):
     current_app.logger.info(f"Body (first 200 chars): {body[:200]}")
     current_app.logger.info(f"Body length: {len(body)}")
 
+    parsed_date = parse_date(date)
+
     return {
-        'date': parse_date(date),
+        'date': parsed_date,
         'subject': subject,
         'sender': sender,
         'email': extract_email_address(sender),
         'body': body
     }
+
+def parse_date(date_string):
+    """
+    Parse the date string into a standard format.
+    """
+    try:
+        dt = datetime.strptime(date_string, "%a, %d %b %Y %H:%M:%S %z")
+        return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        # If the above format doesn't work, try a more general approach
+        try:
+            dt = dateutil.parser.parse(date_string)
+            return dt.strftime("%Y-%m-%d")
+        except:
+            return date_string  # Return original string if parsing fails
 
 def extract_company_name(email_data):
     domain = email_data['email'].split('@')[1]
@@ -123,27 +144,30 @@ async def analyze_companies(companies):
     for i, (company_name, data) in enumerate(companies.items(), 1):
         summary = f"Company: {company_name}\n"
         summary += f"Interactions: {data['interactions']}\n"
-        summary += "Email Content:\n"
-        for email in data['emails']:
-            summary += f"Subject: {email.get('subject', 'No subject')}\n"
-            body = email.get('body', '')
-            if body:
-                summary += f"Body: {body[:1000]}...\n"
-            else:
-                summary += "Body: No body content\n"
-            summary += "\n"
+        summary += "Email Threads:\n"
+        for thread in data['threads']:
+            summary += "Thread:\n"
+            for email in thread:
+                summary += f"Subject: {email.get('subject', 'No subject')}\n"
+                body = email.get('body', '')
+                if body:
+                    summary += f"Body: {body[:500]}...\n"
+                else:
+                    summary += "Body: No body content\n"
+                summary += "\n"
         company_summaries.append(summary)
         progress_tracker.update(analyzed_companies=i, status=f"Analyzing company {i}/{len(companies)}")
         
-        # Log the summary for each company
         current_app.logger.info(f"Summary for {company_name}:\n{summary}")
 
     prompt = f"""
-    Analyze the following email content for each company and determine if they are startups that our venture capital firm might be considering for investment. Focus primarily on the email body content, not just the subject lines. Look for the following indicators:
+    Analyze the following email content for each company and determine if they are startups that our venture capital firm might be considering for investment. Focus primarily on the email body content, not just the subject lines.
+    If it is a service we're evaluating as a tool that would be used by the firm, it's not a startup. Otherwise, consider the following as potential indicators of a startup:
+
 
     1. Discussions about funding rounds, investments, or pitching to investors
     2. If a company is sending over a deck and/or financials, it's likely a startup, but understand context to make sure it's not just a service we're considering paying for.
-    3. Requests for meetings, demos, or further discussions with investors
+    3. Requests for meetings, demos, or further discussions with investors. However, if the email thread is only 1 email and it's a calendar invite, it's not a startup.
     4. Mentions of product launches, growth metrics, or market opportunities
     5. Any indication of early-stage or innovative technology
 
@@ -154,13 +178,12 @@ async def analyze_companies(companies):
 
     If there's insufficient information, still consider the company name and any context clues. For example, if the company name sounds like a product or service, it might be a startup even with limited email content.
 
-    If it's from fireflies.ai, it's not a startup. if it's from a mucker.com or muckercapital.com email address, it's not a startup.
+    If it's from fireflies.ai or affinity, it's not a startup. 
     Be thorough in your analysis and err on the side of identifying potential startups, even if the evidence is not conclusive.
 
     {' '.join(company_summaries)}
     """
 
-    # Log the full prompt
     current_app.logger.info(f"Full prompt for OpenAI:\n{prompt}")
 
     try:
@@ -185,17 +208,22 @@ async def analyze_companies(companies):
                 company_name = lines[0].replace('Company:', '').strip()
                 is_startup = 'Likely a startup: Yes' in lines[1]
                 if is_startup:
-                    startup_companies[company_name] = companies[company_name].copy()
-                    startup_companies[company_name]['ai_explanation'] = '\n'.join(lines[1:])
-                    current_app.logger.info(f"Identified startup: {company_name}")
-                    current_app.logger.info(f"  Interactions: {startup_companies[company_name]['interactions']}")
-                    current_app.logger.info(f"  Emails: {len(startup_companies[company_name]['emails'])}")
-                    current_app.logger.info(f"  AI Explanation: {startup_companies[company_name]['ai_explanation']}")
+                    clean_company_name = company_name.strip('*').strip()
+                    if clean_company_name in companies:
+                        startup_companies[clean_company_name] = {
+                            'threads': companies[clean_company_name]['threads'],
+                            'ai_explanation': '\n'.join(lines[1:])
+                        }
+                        current_app.logger.info(f"Identified startup: {clean_company_name}")
+                        current_app.logger.info(f"  Threads: {len(startup_companies[clean_company_name]['threads'])}")
+                        current_app.logger.info(f"  AI Explanation: {startup_companies[clean_company_name]['ai_explanation']}")
+                    else:
+                        current_app.logger.warning(f"Identified startup {clean_company_name} not found in original companies list")
 
         current_app.logger.info(f"Identified {len(startup_companies)} potential startups")
-        return startup_companies
+        return startup_companies if startup_companies else {}
     except Exception as e:
-        current_app.logger.error(f"Error in GPT analysis: {e}")
+        current_app.logger.error(f"Error in GPT analysis: {str(e)}")
         return {}
 
 def get_email_body(msg):
@@ -247,29 +275,80 @@ def extract_email_address(sender):
     match = re.search(r'<([^>]+)>', sender)
     return match.group(1) if match else sender
 
+import csv
+from datetime import datetime
+from operator import itemgetter
+
 def generate_csv(startup_companies):
     filename = 'email_data.csv'
+    csv_data = []
+
+    for company, data in startup_companies.items():
+        current_app.logger.info(f"Processing data for {company}:")
+        
+        # Count total emails in all threads
+        total_interactions = sum(len(thread) for thread in data['threads'])
+        current_app.logger.info(f"  Interactions: {total_interactions}")
+        current_app.logger.info(f"  Number of threads: {len(data['threads'])}")
+        
+        # Get first and last interaction dates
+        all_dates = [email['date'] for thread in data['threads'] for email in thread]
+        first_date = min(all_dates)
+        last_date = max(all_dates)
+        
+        # Format dates
+        first_date_formatted = datetime.strptime(first_date, "%Y-%m-%d").strftime("%m-%d-%Y")
+        last_date_formatted = datetime.strptime(last_date, "%Y-%m-%d").strftime("%m-%d-%Y")
+        
+        # Summarize all threads
+        all_threads_summary = []
+        for thread in data['threads']:
+            thread_summary = summarize_thread(thread)
+            all_threads_summary.append(thread_summary)
+        
+        # Join all thread summaries, limiting to 100 words
+        summary = ' '.join(all_threads_summary)
+        summary = ' '.join(summary.split()[:100])  # Limit to 100 words
+        
+        current_app.logger.info(f"  Thread summary: {summary[:200]}...")
+        
+        csv_data.append([
+            first_date_formatted,
+            last_date_formatted,
+            company,
+            total_interactions,
+            summary,
+            data.get('ai_explanation', '')
+        ])
+
+    # Sort by last interaction date, most recent first
+    csv_data.sort(key=lambda x: datetime.strptime(x[1], "%m-%d-%Y"), reverse=True)
+
     with open(filename, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        writer.writerow(['Company', 'Interactions', 'Email Subjects', 'Email Bodies', 'AI Explanation'])
-        for company, data in startup_companies.items():
-            current_app.logger.info(f"Writing data for {company}:")
-            current_app.logger.info(f"  Interactions: {data.get('interactions', 0)}")
-            current_app.logger.info(f"  Number of emails: {len(data.get('emails', []))}")
-            subjects = '; '.join(email.get('subject', '') for email in data.get('emails', []))
-            bodies = '; '.join((email.get('body', '')[:200] + '...') for email in data.get('emails', []))
-            current_app.logger.info(f"  Subjects: {subjects}")
-            current_app.logger.info(f"  Bodies: {bodies[:200]}...")
-            writer.writerow([
-                company,
-                data.get('interactions', 0),
-                subjects,
-                bodies,
-                data.get('ai_explanation', '')
-            ])
+        writer.writerow(['First Interaction Date', 'Last Interaction Date', 'Company', 'Interactions', 'Email Thread Summary', 'AI Explanation'])
+        writer.writerows(csv_data)
+
     current_app.logger.info(f"CSV generated: {filename} with {len(startup_companies)} startups")
     current_app.logger.info(f"Startup companies: {', '.join(startup_companies.keys())}")
     return filename
+
+def summarize_thread(thread):
+    # Extract key information from the thread
+    first_email = thread[0]
+    last_email = thread[-1]
+    
+    # Create a summary
+    summary = f"Thread of {len(thread)} emails. "
+    summary += f"Started: '{first_email['subject']}'. "
+    if len(thread) > 1:
+        summary += f"Last: '{last_email['subject']}'. "
+    
+    # Add a brief content summary (you might want to use AI for a more sophisticated summary)
+    content_summary = ". ".join(set(email['body'][:50] + "..." for email in thread))
+    summary += f"Content: {content_summary[:100]}..."
+    
+    return summary
 
 # This function can be called from your Flask route
 async def process_emails(credentials):

@@ -127,7 +127,12 @@ def start_analysis():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(process_emails(credentials))
+                num_startups, csv_path, error, _ = loop.run_until_complete(process_emails(credentials))
+                if error:
+                    progress_tracker.update(status="Error", current_step=str(error))
+                else:
+                    progress_tracker.update(status="Completed", num_startups=num_startups)
+                current_app.logger.info(f"Analysis completed. num_startups: {num_startups}, csv_path: {csv_path}, error: {error}")
             except Exception as e:
                 current_app.logger.error(f"Error in analysis thread: {str(e)}")
                 progress_tracker.update(status="Error", current_step=str(e))

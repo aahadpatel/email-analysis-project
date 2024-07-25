@@ -9,3 +9,4 @@ setuptools>=58.0.0
 flask-cors==3.0.10
 openai==1.37.0
 tenacity==8.2.2 
+dateutil==2.9.0

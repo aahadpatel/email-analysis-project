@@ -75,12 +75,16 @@ function App() {
 
       if (response.data.status === "Completed") {
         setAnalysisStatus("completed");
+        // Stop checking progress
+        return;
       } else if (response.data.status === "Error") {
         setAnalysisStatus("error");
         setError("Analysis failed: " + response.data.current_step);
+        // Stop checking progress
+        return;
       }
 
-      // Always schedule the next check, regardless of status
+      // Continue checking progress if not completed or error
       setTimeout(checkProgress, 2000);
     } catch (error) {
       console.error("Error checking progress:", error);
@@ -90,8 +94,6 @@ function App() {
         setError("Failed to check progress: " + error.message);
         setAnalysisStatus(null);
       }
-      // Schedule next check even if there's an error
-      setTimeout(checkProgress, 2000);
     }
   };
 
