@@ -3,15 +3,13 @@ import threading
 from flask import current_app, Blueprint, jsonify, request, url_for, session
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
-from .email_analyzer import process_emails
+from .email_analyzer import ProgressTracker, process_emails
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import uuid
 import asyncio
-from .email_analyzer import process_emails, progress
+from .email_analyzer import process_emails, progress_tracker
 import threading
 import asyncio
-
-
 
 if os.getenv('OAUTHLIB_INSECURE_TRANSPORT') == '1':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -122,14 +120,26 @@ def start_analysis():
 
     credentials = Credentials(**session['credentials'])
     
-    # Reset progress
-    progress.update(total_emails=0, processed_emails=0, total_companies=0, analyzed_companies=0, status="Starting")
+    def run_analysis_in_thread(app):
+        with app.app_context():
+            global progress_tracker
+            current_app.logger.info("Analysis thread started")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(process_emails(credentials))
+            except Exception as e:
+                current_app.logger.error(f"Error in analysis thread: {str(e)}")
+                progress_tracker.update(status="Error", current_step=str(e))
+            finally:
+                loop.close()
+            current_app.logger.info("Analysis thread finished")
+
+    app = current_app._get_current_object()
+    threading.Thread(target=run_analysis_in_thread, args=(app,)).start()
+    current_app.logger.info("Analysis thread created and started")
     
-    # Start the analysis in a background thread
-    thread = threading.Thread(target=run_analysis, args=(current_app._get_current_object(), credentials))
-    thread.start()
-    
-    return jsonify({"message": "Analysis started"})
+    return jsonify({"message": "Analysis started"}), 202
 
 def run_analysis(app, credentials):
     with app.app_context():
@@ -160,12 +170,6 @@ def analysis_progress(task_id):
 
 @bp.route('/check_progress', methods=['GET'])
 def check_progress():
-    global progress
-    return jsonify({
-        'total_emails': progress.total_emails,
-        'processed_emails': progress.processed_emails,
-        'total_companies': progress.total_companies,
-        'analyzed_companies': progress.analyzed_companies,
-        'status': progress.status,
-        'num_startups': len(progress.startup_companies)
-    })
+    global progress_tracker
+    current_app.logger.info(f"Check progress called. Current progress: {progress_tracker.get_state()}")
+    return jsonify(progress_tracker.get_state())

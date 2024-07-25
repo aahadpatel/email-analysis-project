@@ -48,11 +48,17 @@ function App() {
 
   const handleStartAnalysis = async () => {
     try {
+      console.log("Starting analysis...");
       setAnalysisStatus("starting");
       setError(null);
       const response = await api.post("/start_analysis");
-      setAnalysisStatus("in_progress");
-      checkProgress();
+      console.log("Start analysis response:", response);
+      if (response.status === 202) {
+        setAnalysisStatus("in_progress");
+        checkProgress();
+      } else {
+        throw new Error("Unexpected response from server");
+      }
     } catch (error) {
       console.error("Error starting analysis:", error);
       setError("Failed to start analysis: " + error.message);
@@ -62,22 +68,30 @@ function App() {
 
   const checkProgress = async () => {
     try {
+      console.log("Checking progress...");
       const response = await api.get("/check_progress");
+      console.log("Progress update received:", response.data);
       setProgress(response.data);
 
       if (response.data.status === "Completed") {
         setAnalysisStatus("completed");
       } else if (response.data.status === "Error") {
         setAnalysisStatus("error");
-        setError("Analysis failed");
-      } else {
-        // Schedule next progress check in 2 seconds
-        setTimeout(checkProgress, 2000);
+        setError("Analysis failed: " + response.data.current_step);
       }
+
+      // Always schedule the next check, regardless of status
+      setTimeout(checkProgress, 2000);
     } catch (error) {
       console.error("Error checking progress:", error);
-      setError("Failed to check progress: " + error.message);
-      setAnalysisStatus(null);
+      if (error.message === "Network Error") {
+        setTimeout(checkProgress, 5000);
+      } else {
+        setError("Failed to check progress: " + error.message);
+        setAnalysisStatus(null);
+      }
+      // Schedule next check even if there's an error
+      setTimeout(checkProgress, 2000);
     }
   };
 

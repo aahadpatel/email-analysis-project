@@ -1,6 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
+  useEffect(() => {
+    console.log("Progress prop updated:", progress);
+  }, [progress]);
+  console.log("Dashboard render - analysisStatus:", analysisStatus);
+  console.log("Dashboard render - progress:", progress);
+  console.log("Dashboard render - error:", error);
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold mb-4">
@@ -34,6 +40,12 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
               {progress.analyzed_companies} / {progress.total_companies}
             </span>
           </p>
+          {progress.num_startups !== undefined && (
+            <p className="text-lg">
+              Identified Startups:{" "}
+              <span className="font-semibold">{progress.num_startups}</span>
+            </p>
+          )}
         </div>
       )}
       {error && (
@@ -52,7 +64,8 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
         >
           <strong className="font-bold">Analysis Completed: </strong>
           <span className="block sm:inline">
-            Check your CSV file for results.
+            Found {progress?.num_startups} potential startup(s). Check your CSV
+            file for results.
           </span>
         </div>
       )}

@@ -24,29 +24,42 @@ class ProgressTracker:
         self.total_companies = 0
         self.analyzed_companies = 0
         self.status = "Not started"
-        self.startup_companies = {}
+        self.num_startups = 0
+        self.current_step = "Initializing"
         self.lock = threading.Lock()
 
     def update(self, **kwargs):
         with self.lock:
             for key, value in kwargs.items():
                 setattr(self, key, value)
-            current_app.logger.info(f"Progress update: {self.status} - Emails: {self.processed_emails}/{self.total_emails}, Companies: {self.analyzed_companies}/{self.total_companies}, Startups: {len(self.startup_companies)}")
+            current_app.logger.info(f"Progress update: {self.__dict__}")
 
-progress = ProgressTracker()
+    def get_state(self):
+        with self.lock:
+            return {
+                'status': self.status,
+                'total_emails': self.total_emails,
+                'processed_emails': self.processed_emails,
+                'total_companies': self.total_companies,
+                'analyzed_companies': self.analyzed_companies,
+                'num_startups': self.num_startups,
+                'current_step': self.current_step
+            }
+
+progress_tracker = ProgressTracker()
 
 
 async def analyze_emails(credentials):
-    global progress
+    global progress_tracker
     current_app.logger.info("Starting email analysis")
-    progress.update(status="Fetching emails")
+    progress_tracker.update(status="Fetching emails")
     
     service = build('gmail', 'v1', credentials=credentials)
     results = service.users().messages().list(userId='me', maxResults=10).execute()
     messages = results.get('messages', [])
     
     current_app.logger.info(f"Fetched {len(messages)} emails")
-    progress.update(total_emails=len(messages), status="Processing emails")
+    progress_tracker.update(total_emails=len(messages), status="Processing emails", processed_emails=0)
     
     companies = defaultdict(lambda: {"emails": [], "interactions": 0})
 
@@ -60,19 +73,19 @@ async def analyze_emails(credentials):
             companies[company_name]["emails"].append(email_data)
             companies[company_name]["interactions"] += 1
         
-        progress.update(processed_emails=i)
+        progress_tracker.update(processed_emails=i, status=f"Processing email {i}/{len(messages)}")
 
     current_app.logger.info(f"Processed all emails. Found {len(companies)} companies")
-    progress.update(total_companies=len(companies), status="Analyzing companies")
+    progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
     
     startup_companies = await analyze_companies(companies)
     
     current_app.logger.info(f"Analysis complete. Found {len(startup_companies)} startup companies")
     current_app.logger.info(f"Startup companies: {', '.join(startup_companies.keys())}")
-    progress.update(status="Generating CSV", startup_companies=startup_companies)
+    progress_tracker.update(status="Generating CSV", num_startups=len(startup_companies))
     csv_path = generate_csv(startup_companies)
     
-    progress.update(status="Completed")
+    progress_tracker.update(status="Completed")
     return len(startup_companies), csv_path
 
 def extract_email_data(msg):
@@ -105,7 +118,7 @@ def extract_company_name(email_data):
     return None
 
 async def analyze_companies(companies):
-    global progress
+    global progress_tracker
     company_summaries = []
     for i, (company_name, data) in enumerate(companies.items(), 1):
         summary = f"Company: {company_name}\n"
@@ -120,7 +133,7 @@ async def analyze_companies(companies):
                 summary += "Body: No body content\n"
             summary += "\n"
         company_summaries.append(summary)
-        progress.update(analyzed_companies=i)
+        progress_tracker.update(analyzed_companies=i, status=f"Analyzing company {i}/{len(companies)}")
         
         # Log the summary for each company
         current_app.logger.info(f"Summary for {company_name}:\n{summary}")
@@ -136,12 +149,12 @@ async def analyze_companies(companies):
 
     For each company, provide a concise analysis:
     1. Clearly state if this is likely a startup (Yes/No/Insufficient Information)
-    2. Briefly explain your reasoning (1-2 sentences)
+    2. Briefly explain your reasoning (1 sentence)
     3. If it's a startup or potentially a startup, summarize what stage they seem to be at and what they're looking for
 
     If there's insufficient information, still consider the company name and any context clues. For example, if the company name sounds like a product or service, it might be a startup even with limited email content.
 
-    if it's from fireflies.ai, it's not a startup. if it's from a mucker.com or muckercapital.com email address, it's not a startup.
+    If it's from fireflies.ai, it's not a startup. if it's from a mucker.com or muckercapital.com email address, it's not a startup.
     Be thorough in your analysis and err on the side of identifying potential startups, even if the evidence is not conclusive.
 
     {' '.join(company_summaries)}
@@ -260,11 +273,17 @@ def generate_csv(startup_companies):
 
 # This function can be called from your Flask route
 async def process_emails(credentials):
-    global progress
-    progress = ProgressTracker()  # Reset progress for each new analysis
+    global progress_tracker
+    current_app.logger.info("process_emails function called")
+    progress_tracker.update(status="Starting", current_step="Initializing")
     try:
+        current_app.logger.info("Starting email analysis process")
+        current_app.logger.info("About to call analyze_emails")
         num_startups, csv_path = await analyze_emails(credentials)
-        return num_startups, csv_path, None, progress
+        current_app.logger.info(f"Email analysis complete. Found {num_startups} startups.")
+        progress_tracker.update(status="Completed", num_startups=num_startups)
+        return num_startups, csv_path, None, progress_tracker
     except Exception as e:
-        progress.update(status="Error")
-        return None, None, str(e), progress
+        current_app.logger.error(f"Error in email analysis: {str(e)}")
+        progress_tracker.update(status="Error", current_step=str(e))
+        return None, None, str(e), progress_tracker
