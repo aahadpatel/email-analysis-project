@@ -1,21 +1,23 @@
-# Email Scraper Web App
+# Email Analyzer for Startup Identification
 
 ## Overview
 
-The Email Scraper Web App is a powerful tool designed to streamline the process of extracting and analyzing information from emails. Built with a Python Flask backend and a React frontend, this application provides a user-friendly interface for scraping emails and processing data efficiently.
+The Email Analyzer is a sophisticated tool designed to help venture capital firms identify potential startup investments by analyzing email communications. Built with a Python Flask backend and a React frontend, this application provides a user-friendly interface for processing emails and generating insightful reports.
 
 ## Features
 
-- **Email Scraping:** Currently extracts email information from the latest ten emails in your gmail inbox including date, subject, sender, and part of the email body. Using GPT to analyze emails. In this case, GPT is attempting to determine if our fund has interacted with a startup. Output is in a CSV.
-- **Data Extraction:** Automatically parse and organize data into structured formats.
-- **Frontend Interface:** Intuitive React-based UI for easy interaction and visualization of extracted data.
-- **Backend Processing:** Robust Flask-based server handling data extraction and processing tasks.
+- **Email Analysis:** Analyzes emails from your Gmail inbox to identify potential startup companies.
+- **AI-Powered Analysis:** Utilizes OpenAI's GPT-3.5 Turbo to interpret email content and determine if the sender is likely a startup.
+- **Batch Processing:** Efficiently processes multiple emails in batches to optimize performance and cost.
+- **CSV Report Generation:** Outputs results in a CSV format, including key information about identified startups.
+- **Progress Tracking:** Real-time updates on the analysis process through the frontend interface.
 
 ## Technologies Used
 
-- **Backend:** Python, Flask
+- **Backend:** Python, Flask, Google Gmail API, OpenAI API
 - **Frontend:** JavaScript, React
-- **Data Storage:** Not storing anything currently!
+- **Data Processing:** AsyncIO for asynchronous operations
+- **AI Model:** OpenAI's GPT-3.5 Turbo
 
 ## Installation
 
@@ -25,28 +27,35 @@ The Email Scraper Web App is a powerful tool designed to streamline the process 
 
    ```bash
    git clone https://github.com/aahadpatel/email-analysis-project
+
    ```
 
-2. Navigate to the `backend` directory:
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/aahadpatel/email-analysis-project
+   ```
+
+1. Navigate to the `backend` directory:
 
    ```bash
    cd backend
    ```
 
-3. Create and activate a virtual environment:
+1. Create and activate a virtual environment:
 
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
    ```
 
-4. Install dependencies:
+1. Install dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-5. Run the Flask server:
+1. Run the Flask server:
    ```bash
    flask run --port=INSERT_PORT
    ```
