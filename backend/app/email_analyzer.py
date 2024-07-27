@@ -22,6 +22,21 @@ logger = logging.getLogger(__name__)
 # Cache for storing processed email data
 email_cache = cachetools.TTLCache(maxsize=1000, ttl=3600)
 
+# Set of blacklisted domains
+BLACKLISTED_DOMAINS = {
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
+    'fireflies.ai', 'affinity.co', 'linkedin.com', 'google.com',
+    'microsoft.com', 'apple.com', 'amazon.com', 'facebook.com', 
+    'substack.com', 'harmonic.ai', 'slack.com', 'zoom.us', 
+    'calendly.com', 'salesforce.com', 'hubspot.com', 
+    'zendesk.com', 'asana.com', 'trello.com', 'notion.so', 
+    'airtable.com', 'coda.io', 'figma.com', 'webflow.com', 
+    'bubble.io', 'typeform.com', 'zapier.com', 'segment.com', 
+    'mixpanel.com', 'amplitude.com', 'looker.com', 'mode.com', 'periscope.io', 'metabase.com',
+    'superset.apache.org', 'segment.com', 'snowflake.com', 'email.crunchbase.com:'
+    # Add more domains as needed
+}
+
 class ProgressTracker:
     def __init__(self):
         self.total_emails = 0
@@ -88,6 +103,8 @@ async def analyze_emails(credentials):
                 companies[company_name]["threads"].append(thread_emails)
                 companies[company_name]["interactions"] += len(thread_emails)
                 current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
+            else:
+                current_app.logger.info(f"Skipped blacklisted domain for email: {thread_emails[0]['email']}")
             
             processed_emails += len(thread_emails)
             processed_threads += 1
@@ -155,7 +172,7 @@ def parse_date(date_string):
 # Extracts the company name from an email address
 def extract_company_name(email_data):
     domain = email_data['email'].split('@')[1]
-    if domain not in ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com']:
+    if domain not in BLACKLISTED_DOMAINS:
         return domain
     return None
 
