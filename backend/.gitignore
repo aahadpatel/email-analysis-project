@@ -6,6 +6,7 @@ instance/
 .pytest_cache/
 .coverage
 .env
+.DS_Store
 htmlcov/
 dist/
 build/

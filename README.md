@@ -27,13 +27,6 @@ The Email Analyzer is a sophisticated tool designed to help venture capital firm
 
    ```bash
    git clone https://github.com/aahadpatel/email-analysis-project
-
-   ```
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/aahadpatel/email-analysis-project
    ```
 
 1. Navigate to the `backend` directory:
