@@ -5,10 +5,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport import requests as google_auth_requests
 from google.oauth2 import id_token
-import google.auth.transport.requests
-from .email_analyzer import ProgressTracker, process_emails
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
-import uuid
+from .email_analyzer import process_emails
 import asyncio
 from .email_analyzer import process_emails, progress_tracker
 

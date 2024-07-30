@@ -234,7 +234,6 @@ async def analyze_companies(companies):
     If it's a startup, summarize what stage they seem to be at and what they're looking for
 
     If there's insufficient information, err on the side of No.
-    If it's from fireflies.ai or affinity, it's not a startup. 
     Be thorough in your analysis.
 
     {' '.join(company_summaries)}
