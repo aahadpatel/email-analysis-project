@@ -33,9 +33,11 @@ BLACKLISTED_DOMAINS = {
     'airtable.com', 'coda.io', 'figma.com', 'webflow.com', 
     'bubble.io', 'typeform.com', 'zapier.com', 'segment.com', 
     'mixpanel.com', 'amplitude.com', 'looker.com', 'mode.com', 'periscope.io', 'metabase.com',
-    'superset.apache.org', 'segment.com', 'snowflake.com', 'email.crunchbase.com:'
+    'superset.apache.org', 'segment.com', 'snowflake.com', 'email.crunchbase.com', 'email.linkedin.com', 'startups.brex.com',
     # Add more domains as needed
 }
+
+MUCKER_DOMAINS = {"muckercapital.com", "mucker.com"}
 
 class ProgressTracker:
     def __init__(self):
@@ -83,6 +85,7 @@ async def analyze_emails(credentials):
     processed_emails = 0
     max_emails = 15  # Limit to 15 emails
     processed_threads = 0
+    skipped_threads = 0
 
     current_app.logger.info(f"Fetching a maximum of {max_emails} emails")
 
@@ -98,21 +101,28 @@ async def analyze_emails(credentials):
             
             current_app.logger.info(f"Processing thread with {len(thread_emails)} emails")
             
+            # Check if the email is between two Mucker addresses or from a blacklisted domain
+            sender_domain = thread_emails[0]['sender_email'].split('@')[1]
+            recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
+            if (sender_domain in MUCKER_DOMAINS and recipient_domain in MUCKER_DOMAINS) or \
+               (sender_domain in BLACKLISTED_DOMAINS or recipient_domain in BLACKLISTED_DOMAINS):
+                current_app.logger.info(f"Skipped email: {thread_emails[0]['sender_email']} to {thread_emails[0]['recipient_email']}")
+                skipped_threads += 1
+                continue
+            
             company_name = extract_company_name(thread_emails[0])
             if company_name:
                 companies[company_name]["threads"].append(thread_emails)
                 companies[company_name]["interactions"] += len(thread_emails)
                 current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
-            else:
-                current_app.logger.info(f"Skipped blacklisted domain for email: {thread_emails[0]['email']}")
             
             processed_emails += len(thread_emails)
             processed_threads += 1
             progress_tracker.update(
                 total_emails=max_emails,
                 processed_emails=min(processed_emails, max_emails),
-                total_threads=processed_threads,
-                status=f"Processed {processed_threads} threads, {min(processed_emails, max_emails)}/{max_emails} emails"
+                total_threads=processed_threads + skipped_threads,
+                status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, max_emails)}/{max_emails} emails"
             )
 
             if processed_emails >= max_emails:
@@ -122,7 +132,7 @@ async def analyze_emails(credentials):
             break
         page_token = results['nextPageToken']
 
-    current_app.logger.info(f"Processed {processed_threads} threads, {processed_emails} emails. Found {len(companies)} companies")
+    current_app.logger.info(f"Processed {processed_threads} threads, skipped {skipped_threads}, {processed_emails} emails. Found {len(companies)} companies")
     progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
     startup_companies = await analyze_companies(companies)
     progress_tracker.update(status="Generating CSV", num_startups=len(startup_companies))
@@ -149,13 +159,18 @@ async def extract_email_data(msg):
 
     parsed_date = parse_date(date)
 
+    recipient = next((header['value'] for header in headers if header['name'].lower() == 'to'), '')
+    recipient_email = extract_email_address(recipient)
+
     email_data = {
         'date': parsed_date,
         'subject': subject,
         'sender': sender,
-        'email': extract_email_address(sender),
+        'sender_email': extract_email_address(sender),
+        'recipient_email': recipient_email,
         'body': body
     }
+
 
     email_cache[msg_id] = email_data
     current_app.logger.info(f"Extracted and cached data for email {msg_id}")
@@ -171,11 +186,16 @@ def parse_date(date_string):
 
 # Extracts the company name from an email address
 def extract_company_name(email_data):
-    domain = email_data['email'].split('@')[1]
-    if domain not in BLACKLISTED_DOMAINS:
-        return domain
-    return None
-
+    sender_domain = email_data['sender_email'].split('@')[1]
+    recipient_domain = email_data['recipient_email'].split('@')[1]
+    
+    if sender_domain in MUCKER_DOMAINS:
+        return recipient_domain if recipient_domain not in MUCKER_DOMAINS else None
+    elif recipient_domain in MUCKER_DOMAINS:
+        return sender_domain
+    else:
+        return sender_domain if sender_domain not in BLACKLISTED_DOMAINS else None
+    
 # Analyzes companies to determine if they are startups
 async def analyze_companies(companies):
     global progress_tracker
@@ -304,6 +324,9 @@ def generate_csv(startup_companies):
         yield ['First Interaction Date', 'Last Interaction Date', 'Company', 'Interactions', 'Last Interaction', 'AI Explanation']
         for company, data in startup_companies.items():
             try:
+                current_app.logger.info(f"Processing data for {company}")
+                current_app.logger.debug(f"Data structure: {data}")  # Log the entire data structure
+
                 all_dates = [email['date'] for thread in data['threads'] for email in thread]
                 first_date = min(all_dates)
                 last_date = max(all_dates)
@@ -316,7 +339,7 @@ def generate_csv(startup_companies):
                 # Get the last email from the most recent thread
                 last_email = data['last_emails'][-1] if data['last_emails'] else None
                 if last_email:
-                    last_interaction = f"{last_email['email']} last sent: {last_email['body'][:100]}..."
+                    last_interaction = f"{last_email.get('sender_email', 'Unknown')} last sent: {last_email['body'][:100]}..."
                 else:
                     last_interaction = "No interaction data available"
                 
@@ -330,6 +353,7 @@ def generate_csv(startup_companies):
                 ]
             except Exception as e:
                 current_app.logger.error(f"Error processing data for {company}: {str(e)}")
+                current_app.logger.error(f"Data causing error: {data}")  # Log the problematic data
 
     with open(filename, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
