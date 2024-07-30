@@ -1,15 +1,18 @@
 import os
 import threading
-from flask import current_app, Blueprint, jsonify, request, url_for, session
+from flask import current_app, Blueprint, jsonify, request, url_for, session, redirect
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
+from google.auth.transport import requests as google_auth_requests
+from google.oauth2 import id_token
+import google.auth.transport.requests
 from .email_analyzer import ProgressTracker, process_emails
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import uuid
 import asyncio
 from .email_analyzer import process_emails, progress_tracker
-import threading
-import asyncio
+
+ALLOWED_DOMAINS = ['muckercapital.com', 'mucker.com']
 
 if os.getenv('OAUTHLIB_INSECURE_TRANSPORT') == '1':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -30,7 +33,7 @@ def login():
     try:
         flow = Flow.from_client_secrets_file(
             get_client_secrets_file(), 
-            scopes=['https://www.googleapis.com/auth/gmail.readonly']
+            scopes=['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid']
         )
         flow.redirect_uri = url_for('main.oauth2callback', _external=True)
         authorization_url, state = flow.authorization_url(
@@ -42,7 +45,7 @@ def login():
     except Exception as e:
         current_app.logger.error(f"Error in login route: {str(e)}")
         return jsonify({"error": "Failed to generate authorization URL", "details": str(e)}), 500
-
+    
 @bp.route('/oauth2callback')
 def oauth2callback():
     current_app.logger.info("OAuth callback route accessed")
@@ -50,23 +53,40 @@ def oauth2callback():
         state = session['state']
         flow = Flow.from_client_secrets_file(
             get_client_secrets_file(),
-            scopes=['https://www.googleapis.com/auth/gmail.readonly'],
+            scopes=['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid'],
             state=state
         )
         flow.redirect_uri = url_for('main.oauth2callback', _external=True)
 
-        authorization_response = request.url
-        flow.fetch_token(authorization_response=authorization_response)
+        current_app.logger.info("Fetching token...")
+        flow.fetch_token(authorization_response=request.url)
+        current_app.logger.info("Token fetched successfully")
 
         credentials = flow.credentials
+        request_obj = google_auth_requests.Request()
+        
+        current_app.logger.info("Verifying ID token...")
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token, request_obj, credentials.client_id)
+        current_app.logger.info("ID token verified successfully")
+
+        email = id_info.get('email')
+        domain = email.split('@')[1]
+        current_app.logger.info(f"Email: {email}, Domain: {domain}")
+
+        if domain not in ALLOWED_DOMAINS:
+            current_app.logger.warning(f"Unauthorized access attempt from domain: {domain}")
+            return redirect('http://localhost:3000/unauthorized')
+
         session['credentials'] = credentials_to_dict(credentials)
+        current_app.logger.info(f"Session credentials set: {session['credentials']}")
 
         current_app.logger.info("Authentication successful")
-        return jsonify({"message": "Authentication successful"})
+        return redirect('http://localhost:3000/dashboard')
     except Exception as e:
         current_app.logger.error(f"Error in OAuth callback: {str(e)}")
-        return jsonify({"error": "Authentication failed", "details": str(e)}), 400
-
+        return redirect('http://localhost:3000/auth-error')
+    
 @bp.route('/analyze_emails', methods=['GET'])
 async def analyze_emails():
     if 'credentials' not in session:
@@ -108,7 +128,22 @@ def catch_all(path):
 @bp.route('/check_auth', methods=['GET'])
 def check_auth():
     is_authenticated = 'credentials' in session
-    return jsonify({"is_authenticated": is_authenticated})
+    email = None
+    if is_authenticated:
+        try:
+            credentials = Credentials(**session['credentials'])
+            request_obj = google_auth_requests.Request()
+            credentials.refresh(request_obj)
+            id_info = id_token.verify_oauth2_token(
+                credentials.id_token, request_obj, credentials.client_id)
+            email = id_info.get('email')
+        except Exception as e:
+            current_app.logger.error(f"Error verifying token: {str(e)}")
+            is_authenticated = False
+    return jsonify({
+        "is_authenticated": is_authenticated,
+        "email": email
+    })
 
 # Global dictionary to store analysis tasks
 analysis_tasks = {}

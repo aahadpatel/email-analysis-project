@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import {
+  BrowserRouter as Router,
+  Route,
+  Routes,
+  Navigate,
+} from "react-router-dom";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
+import Unauthorized from "./components/Unauthorized";
+import AuthError from "./components/AuthError";
 
 const api = axios.create({
   baseURL: "http://localhost:5001",
@@ -98,26 +106,47 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
-      <div className="relative py-3 sm:max-w-xl sm:mx-auto">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-light-blue-500 shadow-lg transform -skew-y-6 sm:skew-y-0 sm:-rotate-6 sm:rounded-3xl"></div>
-        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-20">
-          <h1 className="text-4xl font-bold mb-5 text-center text-gray-800">
-            Email Analysis App
-          </h1>
-          {!isAuthenticated ? (
-            <Login onLogin={handleLogin} onTestCORS={testCORS} />
-          ) : (
-            <Dashboard
-              onStartAnalysis={handleStartAnalysis}
-              analysisStatus={analysisStatus}
-              progress={progress}
-              error={error}
-            />
-          )}
+    <Router>
+      <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
+        <div className="relative py-3 sm:max-w-xl sm:mx-auto">
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-light-blue-500 shadow-lg transform -skew-y-6 sm:skew-y-0 sm:-rotate-6 sm:rounded-3xl"></div>
+          <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-20">
+            <h1 className="text-4xl font-bold mb-5 text-center text-gray-800">
+              Email Analysis App
+            </h1>
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  isAuthenticated ? (
+                    <Navigate to="/dashboard" replace />
+                  ) : (
+                    <Login onLogin={handleLogin} onTestCORS={testCORS} />
+                  )
+                }
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  isAuthenticated ? (
+                    <Dashboard
+                      onStartAnalysis={handleStartAnalysis}
+                      analysisStatus={analysisStatus}
+                      progress={progress}
+                      error={error}
+                    />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+              <Route path="/auth-error" element={<AuthError />} />
+            </Routes>
+          </div>
         </div>
       </div>
-    </div>
+    </Router>
   );
 }
 
