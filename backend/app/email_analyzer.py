@@ -89,56 +89,70 @@ async def analyze_emails(credentials):
 
     current_app.logger.info(f"Fetching a maximum of {max_emails} emails")
 
-    while True:
-        results = service.users().threads().list(userId='me', maxResults=5, pageToken=page_token).execute()
-        threads = results.get('threads', [])
-        
-        current_app.logger.info(f"Fetched {len(threads)} threads")
-        
-        for thread in threads:
-            thread_data = service.users().threads().get(userId='me', id=thread['id']).execute()
-            thread_emails = await asyncio.gather(*[extract_email_data(msg) for msg in thread_data['messages']])
+    try:
+        while True:
+            results = service.users().threads().list(userId='me', maxResults=5, pageToken=page_token).execute()
+            threads = results.get('threads', [])
             
-            current_app.logger.info(f"Processing thread with {len(thread_emails)} emails")
+            current_app.logger.info(f"Fetched {len(threads)} threads")
             
-            # Check if the email is between two Mucker addresses or from a blacklisted domain
-            sender_domain = thread_emails[0]['sender_email'].split('@')[1]
-            recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
-            if (sender_domain in MUCKER_DOMAINS and recipient_domain in MUCKER_DOMAINS) or \
-               (sender_domain in BLACKLISTED_DOMAINS or recipient_domain in BLACKLISTED_DOMAINS):
-                current_app.logger.info(f"Skipped email: {thread_emails[0]['sender_email']} to {thread_emails[0]['recipient_email']}")
-                skipped_threads += 1
-                continue
-            
-            company_name = extract_company_name(thread_emails[0])
-            if company_name:
-                companies[company_name]["threads"].append(thread_emails)
-                companies[company_name]["interactions"] += len(thread_emails)
-                current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
-            
-            processed_emails += len(thread_emails)
-            processed_threads += 1
-            progress_tracker.update(
-                total_emails=max_emails,
-                processed_emails=min(processed_emails, max_emails),
-                total_threads=processed_threads + skipped_threads,
-                status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, max_emails)}/{max_emails} emails"
-            )
+            for thread in threads:
+                try:
+                    thread_data = service.users().threads().get(userId='me', id=thread['id']).execute()
+                    thread_emails = await asyncio.gather(*[extract_email_data(msg) for msg in thread_data['messages']])
+                    
+                    current_app.logger.info(f"Processing thread with {len(thread_emails)} emails")
+                    
+                    if not thread_emails:
+                        current_app.logger.warning(f"Skipping empty thread: {thread['id']}")
+                        skipped_threads += 1
+                        continue
+                    
+                    # Check if the email is between two Mucker addresses or from a blacklisted domain
+                    sender_domain = thread_emails[0]['sender_email'].split('@')[1]
+                    recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
+                    if (sender_domain in MUCKER_DOMAINS and recipient_domain in MUCKER_DOMAINS) or \
+                    (sender_domain in BLACKLISTED_DOMAINS or recipient_domain in BLACKLISTED_DOMAINS):
+                        current_app.logger.info(f"Skipped email: {thread_emails[0]['sender_email']} to {thread_emails[0]['recipient_email']}")
+                        skipped_threads += 1
+                        continue
+                    
+                    company_name = extract_company_name(thread_emails[0])
+                    if company_name:
+                        companies[company_name]["threads"].append(thread_emails)
+                        companies[company_name]["interactions"] += len(thread_emails)
+                        current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
+                    
+                    processed_emails += len(thread_emails)
+                    processed_threads += 1
+                    progress_tracker.update(
+                        total_emails=max_emails,
+                        processed_emails=min(processed_emails, max_emails),
+                        total_threads=processed_threads + skipped_threads,
+                        status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, max_emails)}/{max_emails} emails"
+                    )
 
-            if processed_emails >= max_emails:
+                    if processed_emails >= max_emails:
+                        break
+                except Exception as e:
+                    current_app.logger.error(f"Error processing thread {thread['id']}: {str(e)}")
+                    skipped_threads += 1
+
+            if processed_emails >= max_emails or 'nextPageToken' not in results:
                 break
+            page_token = results['nextPageToken']
 
-        if processed_emails >= max_emails or 'nextPageToken' not in results:
-            break
-        page_token = results['nextPageToken']
-
-    current_app.logger.info(f"Processed {processed_threads} threads, skipped {skipped_threads}, {processed_emails} emails. Found {len(companies)} companies")
-    progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
-    startup_companies = await analyze_companies(companies)
-    progress_tracker.update(status="Generating CSV", num_startups=len(startup_companies))
-    csv_path = generate_csv(startup_companies)
-    progress_tracker.update(status="Completed")
-    return len(startup_companies), csv_path
+        current_app.logger.info(f"Processed {processed_threads} threads, skipped {skipped_threads}, {processed_emails} emails. Found {len(companies)} companies")
+        progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
+        startup_companies = await analyze_companies(companies)
+        progress_tracker.update(status="Generating CSV", num_startups=len(startup_companies))
+        csv_path = generate_csv(startup_companies)
+        progress_tracker.update(status="Completed")
+        return len(startup_companies), csv_path
+    except Exception as e:
+        current_app.logger.error(f"Error in analyze_emails: {str(e)}")
+        progress_tracker.update(status="Error", current_step=str(e))
+        return None, None
 
 # Extracts relevant data from an email message
 async def extract_email_data(msg):
@@ -186,15 +200,19 @@ def parse_date(date_string):
 
 # Extracts the company name from an email address
 def extract_company_name(email_data):
-    sender_domain = email_data['sender_email'].split('@')[1]
-    recipient_domain = email_data['recipient_email'].split('@')[1]
-    
-    if sender_domain in MUCKER_DOMAINS:
-        return recipient_domain if recipient_domain not in MUCKER_DOMAINS else None
-    elif recipient_domain in MUCKER_DOMAINS:
-        return sender_domain
-    else:
-        return sender_domain if sender_domain not in BLACKLISTED_DOMAINS else None
+    try:
+        sender_domain = email_data['sender_email'].split('@')[1]
+        recipient_domain = email_data['recipient_email'].split('@')[1]
+        
+        if sender_domain in MUCKER_DOMAINS:
+            return recipient_domain if recipient_domain not in MUCKER_DOMAINS else None
+        elif recipient_domain in MUCKER_DOMAINS:
+            return sender_domain
+        else:
+            return sender_domain if sender_domain not in BLACKLISTED_DOMAINS else None
+    except Exception as e:
+        current_app.logger.error(f"Error extracting company name: {str(e)}")
+        return None
     
 # Analyzes companies to determine if they are startups
 async def analyze_companies(companies):
