@@ -119,8 +119,18 @@ async def analyze_emails(credentials):
                     
                     company_name = extract_company_name(thread_emails[0])
                     if company_name:
-                        companies[company_name]["threads"].append(thread_emails)
-                        companies[company_name]["interactions"] += len(thread_emails)
+                        if company_name in companies:
+                            current_app.logger.info(f"Adding new thread to existing company: {company_name}")
+                            companies[company_name]["threads"].append(thread_emails)
+                            companies[company_name]["interactions"] += len(thread_emails)
+                            # Here I could add logic to merge or update any additional information
+                        else:
+                            current_app.logger.info(f"Adding new company: {company_name}")
+                            companies[company_name] = {
+                                "threads": [thread_emails],
+                                "interactions": len(thread_emails),
+                            }
+                        
                         current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
                     
                     processed_emails += len(thread_emails)
