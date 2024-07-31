@@ -2,7 +2,16 @@
 
 ## Overview
 
-The Email Analyzer is a sophisticated tool designed to help venture capital firms identify potential startup investments by analyzing email communications. Built with a Python Flask backend and a React frontend, this application provides a user-friendly interface for processing emails and generating insightful reports.
+The Email Analyzer is a tool designed to help venture capital firms identify potential startup investments by analyzing email communications since existing CRMs aren't ideal. Built with a Python Flask backend and a React frontend, this application provides a user-friendly interface for processing emails and generating a CSV. The output CSV is structured with the following columns:
+
+- **First Interaction Date:** The date of the first interaction with the startup.
+- **Last Interaction Date:** The date of the last interaction with the startup.
+- **Company:** The name of the startup.
+- **Interactions:** The number of interactions with the startup.
+- **Last Interaction:** A snippet of the last interaction with the startup.
+- **AI Explanation:** A summary of the AI's reasoning for why the company we're speaking to is a startup.
+
+I'll most likely add database functionality in the future, but for now the output is just saved to a CSV. I'm not currently storing any data.
 
 ## Features
 
@@ -29,26 +38,32 @@ The Email Analyzer is a sophisticated tool designed to help venture capital firm
    git clone https://github.com/aahadpatel/email-analysis-project
    ```
 
-1. Navigate to the `backend` directory:
+2. Navigate to the `backend` directory:
 
    ```bash
    cd backend
    ```
 
-1. Create and activate a virtual environment:
+3. Create and activate a virtual environment:
 
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
    ```
 
-1. Install dependencies:
+4. Install dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-1. Run the Flask server:
+5. Set up the configuration:
+
+- Edit `config/settings.py` to set the correct environment variables (see Configuration section below for more details)
+
+6. Create a `.env` file in the `backend` directory and set a `SECRET_KEY` and `OPENAI_API_KEY`.
+
+7. Run the Flask server:
    ```bash
    flask run --port=INSERT_PORT
    ```
@@ -77,6 +92,31 @@ The Email Analyzer is a sophisticated tool designed to help venture capital firm
 1. Open your browser and navigate to `http://localhost:3000` to access the frontend interface.
 2. Follow the instructions in the app to input email data and initiate the scraping process.
 3. View and analyze the extracted information through the provided UI elements.
+
+## Configuration
+
+The application uses a configuration file located at `backend/config/settings.py`. This file contains important settings such as:
+
+- `MAX_EMAILS`: The maximum number of emails to process.
+- `INTERNAL_DOMAINS`: The list of internal domains to filter out.
+- `BLACKLISTED_DOMAINS`: The list of blacklisted domains to filter out.
+- `OPENAI_API_KEY`: The API key for the OpenAI API.
+- `SECRET_KEY`: The secret key for the Flask application.
+
+This is an example of what the configuration file should look like:
+
+```python
+import os
+
+MAX_EMAILS = 100
+# domains we do not want to process
+BLACKLISTED_DOMAINS = {'gmail.com', 'yahoo.com', 'hotmail.com'}
+# if the email thread is between any of these domains, we don't want to process it
+INTERNAL_DOMAINS = {'mucker.com', 'muckercapital.com'}
+# pulling from .env file located at backend/.env
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY')
+```
 
 ## Contributing
 

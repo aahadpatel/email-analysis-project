@@ -14,6 +14,8 @@ import threading
 from flask import current_app
 import aiohttp
 import cachetools
+from config.settings import MAX_EMAILS, INTERNAL_DOMAINS, BLACKLISTED_DOMAINS
+
 
 client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 logging.basicConfig(level=logging.INFO)
@@ -21,23 +23,6 @@ logger = logging.getLogger(__name__)
 
 # Cache for storing processed email data
 email_cache = cachetools.TTLCache(maxsize=1000, ttl=3600)
-
-# Set of blacklisted domains
-BLACKLISTED_DOMAINS = {
-    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
-    'fireflies.ai', 'affinity.co', 'linkedin.com', 'google.com',
-    'microsoft.com', 'apple.com', 'amazon.com', 'facebook.com', 
-    'substack.com', 'harmonic.ai', 'slack.com', 'zoom.us', 
-    'calendly.com', 'salesforce.com', 'hubspot.com', 
-    'zendesk.com', 'asana.com', 'trello.com', 'notion.so', 
-    'airtable.com', 'coda.io', 'figma.com', 'webflow.com', 
-    'bubble.io', 'typeform.com', 'zapier.com', 'segment.com', 
-    'mixpanel.com', 'amplitude.com', 'looker.com', 'mode.com', 'periscope.io', 'metabase.com',
-    'superset.apache.org', 'segment.com', 'snowflake.com', 'email.crunchbase.com', 'email.linkedin.com', 'startups.brex.com',
-    # Add more domains as needed
-}
-
-MUCKER_DOMAINS = {"muckercapital.com", "mucker.com"}
 
 class ProgressTracker:
     def __init__(self):
@@ -83,11 +68,10 @@ async def analyze_emails(credentials):
     companies = defaultdict(lambda: {"threads": [], "interactions": 0})
     page_token = None
     processed_emails = 0
-    max_emails = 15  # Limit to 15 emails
     processed_threads = 0
     skipped_threads = 0
 
-    current_app.logger.info(f"Fetching a maximum of {max_emails} emails")
+    current_app.logger.info(f"Fetching a maximum of {MAX_EMAILS} emails")
 
     try:
         while True:
@@ -111,7 +95,7 @@ async def analyze_emails(credentials):
                     # Check if the email is between two Mucker addresses or from a blacklisted domain
                     sender_domain = thread_emails[0]['sender_email'].split('@')[1]
                     recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
-                    if (sender_domain in MUCKER_DOMAINS and recipient_domain in MUCKER_DOMAINS) or \
+                    if (sender_domain in INTERNAL_DOMAINS and recipient_domain in INTERNAL_DOMAINS) or \
                     (sender_domain in BLACKLISTED_DOMAINS or recipient_domain in BLACKLISTED_DOMAINS):
                         current_app.logger.info(f"Skipped email: {thread_emails[0]['sender_email']} to {thread_emails[0]['recipient_email']}")
                         skipped_threads += 1
@@ -136,19 +120,19 @@ async def analyze_emails(credentials):
                     processed_emails += len(thread_emails)
                     processed_threads += 1
                     progress_tracker.update(
-                        total_emails=max_emails,
-                        processed_emails=min(processed_emails, max_emails),
+                        total_emails=MAX_EMAILS,
+                        processed_emails=min(processed_emails, MAX_EMAILS),
                         total_threads=processed_threads + skipped_threads,
-                        status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, max_emails)}/{max_emails} emails"
+                        status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, MAX_EMAILS)}/{MAX_EMAILS} emails"
                     )
 
-                    if processed_emails >= max_emails:
+                    if processed_emails >= MAX_EMAILS:
                         break
                 except Exception as e:
                     current_app.logger.error(f"Error processing thread {thread['id']}: {str(e)}")
                     skipped_threads += 1
 
-            if processed_emails >= max_emails or 'nextPageToken' not in results:
+            if processed_emails >= MAX_EMAILS or 'nextPageToken' not in results:
                 break
             page_token = results['nextPageToken']
 
@@ -195,7 +179,6 @@ async def extract_email_data(msg):
         'body': body
     }
 
-
     email_cache[msg_id] = email_data
     current_app.logger.info(f"Extracted and cached data for email {msg_id}")
     return email_data
@@ -214,9 +197,9 @@ def extract_company_name(email_data):
         sender_domain = email_data['sender_email'].split('@')[1]
         recipient_domain = email_data['recipient_email'].split('@')[1]
         
-        if sender_domain in MUCKER_DOMAINS:
-            return recipient_domain if recipient_domain not in MUCKER_DOMAINS else None
-        elif recipient_domain in MUCKER_DOMAINS:
+        if sender_domain in INTERNAL_DOMAINS:
+            return recipient_domain if recipient_domain not in INTERNAL_DOMAINS else None
+        elif recipient_domain in INTERNAL_DOMAINS:
             return sender_domain
         else:
             return sender_domain if sender_domain not in BLACKLISTED_DOMAINS else None
@@ -285,12 +268,17 @@ async def analyze_companies(companies):
         startup_companies = {}
         for company_analysis in ai_response.split('\n\n'):
             lines = company_analysis.split('\n')
+            print("lines:", lines)
             if len(lines) >= 2:
                 ai_company_name = ' '.join(lines[0].replace('Company:', '').strip().strip('*').split()).lower()
+                ai_company_name = re.sub(r'^\d+\.\s*', '', ai_company_name)  # Remove leading numbers and dots
+                ai_company_name = ai_company_name.strip('*')  # Remove any remaining asterisks
                 is_startup = 'yes' in lines[1].strip().lower()
+                print("company:", ai_company_name)
+                print("is_startup:", is_startup)
                 current_app.logger.info(f"AI analysis for {ai_company_name}: {'Startup' if is_startup else 'Not a startup'}")
                 if is_startup:
-                    matching_company = next((name for name in companies.keys() if name.lower() == ai_company_name), None)
+                    matching_company = next((name for name in companies.keys() if ai_company_name in name.lower()), None)
                     if matching_company:
                         startup_companies[matching_company] = companies[matching_company].copy()
                         startup_companies[matching_company]['ai_explanation'] = '\n'.join(lines[1:])
