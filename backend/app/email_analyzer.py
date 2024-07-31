@@ -70,17 +70,25 @@ async def analyze_emails(credentials):
     processed_emails = 0
     processed_threads = 0
     skipped_threads = 0
+    batch_size = 10  # Number of threads to fetch in each batch
 
     current_app.logger.info(f"Fetching a maximum of {MAX_EMAILS} emails")
 
     try:
-        while True:
-            results = service.users().threads().list(userId='me', maxResults=5, pageToken=page_token).execute()
+        while processed_emails < MAX_EMAILS:
+            results = service.users().threads().list(userId='me', maxResults=batch_size, pageToken=page_token).execute()
             threads = results.get('threads', [])
             
+            if not threads:
+                current_app.logger.info("No more threads to process")
+                break
+
             current_app.logger.info(f"Fetched {len(threads)} threads")
             
             for thread in threads:
+                if processed_emails >= MAX_EMAILS:
+                    break
+
                 try:
                     thread_data = service.users().threads().get(userId='me', id=thread['id']).execute()
                     thread_emails = await asyncio.gather(*[extract_email_data(msg) for msg in thread_data['messages']])
@@ -92,7 +100,7 @@ async def analyze_emails(credentials):
                         skipped_threads += 1
                         continue
                     
-                    # Check if the email is between two Mucker addresses or from a blacklisted domain
+                    # Check if the email is between two internal addresses or from a blacklisted domain
                     sender_domain = thread_emails[0]['sender_email'].split('@')[1]
                     recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
                     if (sender_domain in INTERNAL_DOMAINS and recipient_domain in INTERNAL_DOMAINS) or \
@@ -107,7 +115,6 @@ async def analyze_emails(credentials):
                             current_app.logger.info(f"Adding new thread to existing company: {company_name}")
                             companies[company_name]["threads"].append(thread_emails)
                             companies[company_name]["interactions"] += len(thread_emails)
-                            # Here I could add logic to merge or update any additional information
                         else:
                             current_app.logger.info(f"Adding new company: {company_name}")
                             companies[company_name] = {
@@ -126,13 +133,12 @@ async def analyze_emails(credentials):
                         status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, MAX_EMAILS)}/{MAX_EMAILS} emails"
                     )
 
-                    if processed_emails >= MAX_EMAILS:
-                        break
                 except Exception as e:
                     current_app.logger.error(f"Error processing thread {thread['id']}: {str(e)}")
                     skipped_threads += 1
 
-            if processed_emails >= MAX_EMAILS or 'nextPageToken' not in results:
+            if 'nextPageToken' not in results:
+                current_app.logger.info("No more pages to fetch")
                 break
             page_token = results['nextPageToken']
 
