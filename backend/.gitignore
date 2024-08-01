@@ -1,5 +1,6 @@
 # backend/.gitignore
 venv/
+email_data.csv
 config/settings.py
 *.pyc
 __pycache__/

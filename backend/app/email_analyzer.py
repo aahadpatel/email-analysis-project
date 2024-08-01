@@ -70,7 +70,8 @@ async def analyze_emails(credentials):
     processed_emails = 0
     processed_threads = 0
     skipped_threads = 0
-    batch_size = 10  # Number of threads to fetch in each batch
+    batch_size = 100  # Increased batch size for fetching threads
+    email_batch_size = 25  # Number of emails to process in each batch
 
     current_app.logger.info(f"Fetching a maximum of {MAX_EMAILS} emails")
 
@@ -91,47 +92,55 @@ async def analyze_emails(credentials):
 
                 try:
                     thread_data = service.users().threads().get(userId='me', id=thread['id']).execute()
-                    thread_emails = await asyncio.gather(*[extract_email_data(msg) for msg in thread_data['messages']])
+                    thread_messages = thread_data.get('messages', [])
                     
-                    current_app.logger.info(f"Processing thread with {len(thread_emails)} emails")
-                    
-                    if not thread_emails:
-                        current_app.logger.warning(f"Skipping empty thread: {thread['id']}")
-                        skipped_threads += 1
-                        continue
-                    
-                    # Check if the email is between two internal addresses or from a blacklisted domain
-                    sender_domain = thread_emails[0]['sender_email'].split('@')[1]
-                    recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
-                    if (sender_domain in INTERNAL_DOMAINS and recipient_domain in INTERNAL_DOMAINS) or \
-                    (sender_domain in BLACKLISTED_DOMAINS or recipient_domain in BLACKLISTED_DOMAINS):
-                        current_app.logger.info(f"Skipped email: {thread_emails[0]['sender_email']} to {thread_emails[0]['recipient_email']}")
-                        skipped_threads += 1
-                        continue
-                    
-                    company_name = extract_company_name(thread_emails[0])
-                    if company_name:
-                        if company_name in companies:
-                            current_app.logger.info(f"Adding new thread to existing company: {company_name}")
-                            companies[company_name]["threads"].append(thread_emails)
-                            companies[company_name]["interactions"] += len(thread_emails)
-                        else:
-                            current_app.logger.info(f"Adding new company: {company_name}")
-                            companies[company_name] = {
-                                "threads": [thread_emails],
-                                "interactions": len(thread_emails),
-                            }
+                    # Process emails in smaller batches
+                    for i in range(0, len(thread_messages), email_batch_size):
+                        email_batch = thread_messages[i:i+email_batch_size]
+                        thread_emails = await asyncio.gather(*[extract_email_data(msg) for msg in email_batch])
                         
-                        current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
-                    
-                    processed_emails += len(thread_emails)
+                        current_app.logger.info(f"Processing batch of {len(thread_emails)} emails from thread {thread['id']}")
+                        
+                        if not thread_emails:
+                            current_app.logger.warning(f"Skipping empty batch in thread: {thread['id']}")
+                            continue
+                        
+                        # Check if the email is between two internal addresses or from a blacklisted domain
+                        sender_domain = thread_emails[0]['sender_email'].split('@')[1]
+                        recipient_domain = thread_emails[0]['recipient_email'].split('@')[1]
+                        if (sender_domain in INTERNAL_DOMAINS and recipient_domain in INTERNAL_DOMAINS) or \
+                        (sender_domain in BLACKLISTED_DOMAINS or recipient_domain in BLACKLISTED_DOMAINS):
+                            current_app.logger.info(f"Skipped email: {thread_emails[0]['sender_email']} to {thread_emails[0]['recipient_email']}")
+                            skipped_threads += 1
+                            continue
+                        
+                        company_name = extract_company_name(thread_emails[0])
+                        if company_name:
+                            if company_name in companies:
+                                current_app.logger.info(f"Adding new emails to existing company: {company_name}")
+                                companies[company_name]["threads"].append(thread_emails)
+                                companies[company_name]["interactions"] += len(thread_emails)
+                            else:
+                                current_app.logger.info(f"Adding new company: {company_name}")
+                                companies[company_name] = {
+                                    "threads": [thread_emails],
+                                    "interactions": len(thread_emails),
+                                }
+                            
+                            current_app.logger.info(f"Added {len(thread_emails)} emails to company: {company_name}")
+                        
+                        processed_emails += len(thread_emails)
+                        progress_tracker.update(
+                            total_emails=MAX_EMAILS,
+                            processed_emails=min(processed_emails, MAX_EMAILS),
+                            total_threads=processed_threads + skipped_threads,
+                            status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, MAX_EMAILS)}/{MAX_EMAILS} emails"
+                        )
+
+                        if processed_emails >= MAX_EMAILS:
+                            break
+
                     processed_threads += 1
-                    progress_tracker.update(
-                        total_emails=MAX_EMAILS,
-                        processed_emails=min(processed_emails, MAX_EMAILS),
-                        total_threads=processed_threads + skipped_threads,
-                        status=f"Processed {processed_threads} threads, skipped {skipped_threads}, {min(processed_emails, MAX_EMAILS)}/{MAX_EMAILS} emails"
-                    )
 
                 except Exception as e:
                     current_app.logger.error(f"Error processing thread {thread['id']}: {str(e)}")
