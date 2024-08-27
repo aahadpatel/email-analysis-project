@@ -1,15 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-  Navigate,
-} from "react-router-dom";
-import Login from "./components/Login";
-import Dashboard from "./components/Dashboard";
-import Unauthorized from "./components/Unauthorized";
-import AuthError from "./components/AuthError";
+import { BrowserRouter as Router } from "react-router-dom";
+import AppContent from "./AppContent";
 
 const api = axios.create({
   baseURL: "http://localhost:5001",
@@ -74,37 +66,6 @@ function App() {
     }
   };
 
-  const checkProgress = async () => {
-    try {
-      console.log("Checking progress...");
-      const response = await api.get("/check_progress");
-      console.log("Progress update received:", response.data);
-      setProgress(response.data);
-
-      if (response.data.status === "Completed") {
-        setAnalysisStatus("completed");
-        // Stop checking progress
-        return;
-      } else if (response.data.status === "Error") {
-        setAnalysisStatus("error");
-        setError("Analysis failed: " + response.data.current_step);
-        // Stop checking progress
-        return;
-      }
-
-      // Continue checking progress if not completed or error
-      setTimeout(checkProgress, 2000);
-    } catch (error) {
-      console.error("Error checking progress:", error);
-      if (error.message === "Network Error") {
-        setTimeout(checkProgress, 5000);
-      } else {
-        setError("Failed to check progress: " + error.message);
-        setAnalysisStatus(null);
-      }
-    }
-  };
-
   return (
     <Router>
       <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
@@ -114,35 +75,15 @@ function App() {
             <h1 className="text-4xl font-bold mb-5 text-center text-gray-800">
               Email Analysis App
             </h1>
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  isAuthenticated ? (
-                    <Navigate to="/dashboard" replace />
-                  ) : (
-                    <Login onLogin={handleLogin} onTestCORS={testCORS} />
-                  )
-                }
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  isAuthenticated ? (
-                    <Dashboard
-                      onStartAnalysis={handleStartAnalysis}
-                      analysisStatus={analysisStatus}
-                      progress={progress}
-                      error={error}
-                    />
-                  ) : (
-                    <Navigate to="/" replace />
-                  )
-                }
-              />
-              <Route path="/unauthorized" element={<Unauthorized />} />
-              <Route path="/auth-error" element={<AuthError />} />
-            </Routes>
+            <AppContent
+              isAuthenticated={isAuthenticated}
+              analysisStatus={analysisStatus}
+              progress={progress}
+              error={error}
+              handleLogin={handleLogin}
+              testCORS={testCORS}
+              handleStartAnalysis={handleStartAnalysis}
+            />
           </div>
         </div>
       </div>

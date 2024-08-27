@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import ProgressGuide from "./ProgressGuide";
+import { Link } from "react-router-dom";
 
 function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
   useEffect(() => {
@@ -62,15 +63,22 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
           </div>
         )}
         {analysisStatus === "completed" && (
-          <div
-            className="mt-6 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
-            role="alert"
-          >
-            <strong className="font-bold">Analysis Completed: </strong>
-            <span className="block sm:inline">
-              Found {progress?.num_startups} potential startup(s). Check your
-              CSV file for results.
-            </span>
+          <div className="mt-6 space-y-4">
+            <div
+              className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative"
+              role="alert"
+            >
+              <strong className="font-bold">Analysis Completed: </strong>
+              <span className="block sm:inline">
+                Found {progress?.num_startups} potential startup(s).
+              </span>
+            </div>
+            <Link
+              to="/results"
+              className="block w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 text-center"
+            >
+              View Results
+            </Link>
           </div>
         )}
       </div>
