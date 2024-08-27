@@ -10,6 +10,7 @@ import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import Unauthorized from "./components/Unauthorized";
 import AuthError from "./components/AuthError";
+import StartupsTable from "./components/StartupsTable";
 
 const api = axios.create({
   baseURL: "http://localhost:5001",
@@ -142,6 +143,16 @@ function App() {
               />
               <Route path="/unauthorized" element={<Unauthorized />} />
               <Route path="/auth-error" element={<AuthError />} />
+              <Route
+                path="/startups"
+                element={
+                  isAuthenticated ? (
+                    <StartupsTable />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
             </Routes>
           </div>
         </div>

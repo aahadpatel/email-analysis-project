@@ -15,7 +15,8 @@ from flask import current_app
 import aiohttp
 import cachetools
 from config.settings import MAX_EMAILS, INTERNAL_DOMAINS, BLACKLISTED_DOMAINS
-
+from .models import Company
+from .extensions import db
 
 client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 logging.basicConfig(level=logging.INFO)
@@ -58,7 +59,7 @@ class ProgressTracker:
 progress_tracker = ProgressTracker()
 
 # Analyzes email threads to identify potential startup companies
-async def analyze_emails(credentials):
+async def analyze_emails(credentials, user_email):
     global progress_tracker
     current_app.logger.info("Starting email analysis")
     progress_tracker.update(status="Fetching emails")
@@ -70,8 +71,10 @@ async def analyze_emails(credentials):
     processed_emails = 0
     processed_threads = 0
     skipped_threads = 0
-    batch_size = 100  # Increased batch size for fetching threads
-    email_batch_size = 25  # Number of emails to process in each batch
+    # batch_size = 100  # Increased batch size for fetching threads
+    # email_batch_size = 25  # Number of emails to process in each batch
+    batch_size = 10  # Temporary for testing
+    email_batch_size = 5  # Temporary for testing
 
     current_app.logger.info(f"Fetching a maximum of {MAX_EMAILS} emails")
 
@@ -155,7 +158,7 @@ async def analyze_emails(credentials):
         progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
         startup_companies = await analyze_companies(companies)
         progress_tracker.update(status="Generating CSV", num_startups=len(startup_companies))
-        csv_path = generate_csv(startup_companies)
+        csv_path = generate_csv(startup_companies, user_email)
         progress_tracker.update(status="Completed")
         return len(startup_companies), csv_path
     except Exception as e:
@@ -346,7 +349,7 @@ def extract_email_address(sender):
     return match.group(1) if match else sender
 
 # Generates a CSV file containing information about startup companies
-def generate_csv(startup_companies):
+def generate_csv(startup_companies, user_email):
     filename = 'email_data.csv'
     current_app.logger.info(f"Generating CSV for {len(startup_companies)} startups")
     
@@ -373,13 +376,36 @@ def generate_csv(startup_companies):
                 else:
                     last_interaction = "No interaction data available"
                 
+                company_contact = user_email
+                
+                db_company = Company.query.filter_by(name=company).first()
+                db_company = Company.query.filter_by(name=company).first()
+
+                if db_company:
+                    db_company.last_interaction_date = datetime.strptime(last_date, "%Y-%m-%d").date()
+                    db_company.total_interactions = total_interactions
+                    db_company.company_contact = company_contact
+                    current_app.logger.info(f"Updated company in database: {company}")
+                else:
+                    db_company = Company(
+                        name=company,
+                        first_interaction_date=datetime.strptime(first_date, "%Y-%m-%d").date(),
+                        last_interaction_date=datetime.strptime(last_date, "%Y-%m-%d").date(),
+                        total_interactions=total_interactions,
+                        company_contact=company_contact
+                    )
+                    db.session.add(db_company)
+                    current_app.logger.info(f"Added new company to database: {company}")
+                db.session.commit()
+                
                 yield [
                     first_date_formatted,
                     last_date_formatted,
                     company,
                     total_interactions,
                     last_interaction,
-                    data.get('ai_explanation', '')
+                    data.get('ai_explanation', ''),
+                    company_contact
                 ]
             except Exception as e:
                 current_app.logger.error(f"Error processing data for {company}: {str(e)}")
@@ -409,12 +435,12 @@ def summarize_thread(thread):
     return summary
 
 # Processes emails to identify startups
-async def process_emails(credentials):
+async def process_emails(credentials, user_email):
     global progress_tracker
     progress_tracker.update(status="Starting", current_step="Initializing")
     try:
         current_app.logger.info("Starting email processing")
-        num_startups, csv_path = await analyze_emails(credentials)
+        num_startups, csv_path = await analyze_emails(credentials, user_email)
         current_app.logger.info(f"Email processing complete. Found {num_startups} startups.")
         progress_tracker.update(status="Completed", num_startups=num_startups)
         return num_startups, csv_path, None, progress_tracker

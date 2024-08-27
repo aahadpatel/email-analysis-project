@@ -2,6 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
+from .extensions import db
 
 load_dotenv()
 
@@ -16,11 +17,32 @@ def create_app():
     
     if not app.secret_key:
         raise ValueError("No FLASK_SECRET_KEY set for Flask application")
-    
-    app.config.from_mapping(
-        SECRET_KEY='dev',  # Change this to a random string in production
-    )
 
+    # Configure the SQLite database
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    db_path = os.path.join(basedir, 'app.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + db_path
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # Initialize the database
+    db.init_app(app)
+
+    # Create the database tables
+    with app.app_context():
+        try:
+            from .models import Company  # Import the model here
+            db.create_all()
+            app.logger.info("Database tables created successfully")
+
+            # Verify if the table was created
+            if Company.__table__.exists(db.engine):
+                app.logger.info("Company table exists")
+            else:
+                app.logger.error("Company table does not exist")
+        except Exception as e:
+            app.logger.error(f"Error creating database tables: {str(e)}")
+
+    # Import and register blueprint
     from . import routes
     app.register_blueprint(routes.bp)
 

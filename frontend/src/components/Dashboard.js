@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { Link } from "react-router-dom";
 import ProgressGuide from "./ProgressGuide";
 
 function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
@@ -73,6 +74,12 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
             </span>
           </div>
         )}
+        <Link
+          to="/startups"
+          className="block w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 text-center"
+        >
+          View Analyzed Startups
+        </Link>
       </div>
       <ProgressGuide />
     </div>
