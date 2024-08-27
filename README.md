@@ -95,7 +95,44 @@ I'll most likely add database functionality in the future, but for now the outpu
 
 ## Configuration
 
-The application uses a configuration file located at `backend/config/settings.py`. This file contains important settings such as:
+The application uses a configuration file and client secrets for authentication. Follow these steps to set up the necessary files:
+
+1. Create a `backend/instance` folder in your project directory.
+
+2. Inside the `backend/instance` folder, create two files:
+
+   - `client_secret.json`
+   - `config.py`
+
+3. In the `client_secret.json` file, add your Google OAuth 2.0 client credentials. The file should have the following structure:
+
+   ```json
+   {
+     "web": {
+       "client_id": "YOUR_CLIENT_ID",
+       "project_id": "YOUR_PROJECT_ID",
+       "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+       "token_uri": "https://oauth2.googleapis.com/token",
+       "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+       "client_secret": "YOUR_CLIENT_SECRET",
+       "redirect_uris": ["http://localhost:5000/oauth2callback"],
+       "javascript_origins": ["http://localhost:3000"]
+     }
+   }
+   ```
+
+   Replace `YOUR_CLIENT_ID`, `YOUR_PROJECT_ID`, and `YOUR_CLIENT_SECRET` with your actual Google OAuth 2.0 credentials.
+
+4. In the `config.py` file, add any additional configuration variables specific to your instance. For example:
+
+   ```python
+   SECRET_KEY = 'your_secret_key_here'
+   OPENAI_API_KEY = 'your_openai_api_key_here'
+   ```
+
+   Make sure to replace `'your_secret_key_here'` and `'your_openai_api_key_here'` with your actual secret key and OpenAI API key.
+
+The application uses a main configuration file located at `backend/config/settings.py`. This file contains important settings such as:
 
 - `MAX_EMAILS`: The maximum number of emails to process.
 - `INTERNAL_DOMAINS`: The list of internal domains to filter out.
