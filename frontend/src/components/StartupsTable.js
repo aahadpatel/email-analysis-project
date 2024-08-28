@@ -12,6 +12,8 @@ const StartupsTable = () => {
   const [sortDirection, setSortDirection] = useState("asc");
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [totalStartups, setTotalStartups] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [startupsPerPage] = useState(10); // You can adjust this number as needed
 
   useEffect(() => {
     const fetchStartups = async () => {
@@ -147,6 +149,18 @@ const StartupsTable = () => {
     }
   };
 
+  // Calculate pagination values
+  const indexOfLastStartup = currentPage * startupsPerPage;
+  const indexOfFirstStartup = indexOfLastStartup - startupsPerPage;
+  const currentStartups = filteredStartups.slice(
+    indexOfFirstStartup,
+    indexOfLastStartup
+  );
+  const totalPages = Math.ceil(filteredStartups.length / startupsPerPage);
+
+  // Change page
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error)
     return <div className="text-center mt-8 text-red-600">{error}</div>;
@@ -251,7 +265,7 @@ const StartupsTable = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredStartups.map((startup) => (
+                {currentStartups.map((startup) => (
                   <tr
                     key={startup.id}
                     className="bg-white border-b hover:bg-gray-50"
@@ -281,6 +295,47 @@ const StartupsTable = () => {
               </tbody>
             </table>
           </div>
+
+          {filteredStartups.length > 1 && (
+            <div className="mt-4 flex justify-center">
+              <nav
+                className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px"
+                aria-label="Pagination"
+              >
+                <button
+                  onClick={() => paginate(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 ${
+                    currentPage === 1 ? "cursor-not-allowed" : ""
+                  }`}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages).keys()].map((number) => (
+                  <button
+                    key={number + 1}
+                    onClick={() => paginate(number + 1)}
+                    className={`relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium ${
+                      currentPage === number + 1
+                        ? "text-blue-600 bg-blue-50"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {number + 1}
+                  </button>
+                ))}
+                <button
+                  onClick={() => paginate(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 ${
+                    currentPage === totalPages ? "cursor-not-allowed" : ""
+                  }`}
+                >
+                  Next
+                </button>
+              </nav>
+            </div>
+          )}
 
           {deleteConfirmation && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
