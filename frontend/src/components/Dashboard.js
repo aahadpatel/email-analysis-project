@@ -69,17 +69,19 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
           >
             <strong className="font-bold">Analysis Completed: </strong>
             <span className="block sm:inline">
-              Found {progress?.num_startups} potential startup(s). Check your
-              CSV file for results.
+              Found {progress?.num_startups} potential startup(s). Click the
+              View Analyzed Startups button for results.
             </span>
           </div>
         )}
-        <Link
-          to="/startups"
-          className="block w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 text-center"
-        >
-          View Analyzed Startups
-        </Link>
+        {analysisStatus !== "starting" && analysisStatus !== "in_progress" && (
+          <Link
+            to="/startups"
+            className="block w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 text-center"
+          >
+            View Analyzed Startups
+          </Link>
+        )}
       </div>
       <ProgressGuide />
     </div>

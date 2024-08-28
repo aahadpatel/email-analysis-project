@@ -5,6 +5,7 @@ config/settings.py
 *.pyc
 __pycache__/
 instance/
+app/app.db
 .pytest_cache/
 .coverage
 .env

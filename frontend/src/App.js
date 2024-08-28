@@ -108,56 +108,77 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
-        <div className="relative py-3 sm:max-w-xl sm:mx-auto">
-          <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-light-blue-500 shadow-lg transform -skew-y-6 sm:skew-y-0 sm:-rotate-6 sm:rounded-3xl"></div>
-          <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-20">
-            <h1 className="text-4xl font-bold mb-5 text-center text-gray-800">
-              Email Analysis App
-            </h1>
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  isAuthenticated ? (
-                    <Navigate to="/dashboard" replace />
-                  ) : (
-                    <Login onLogin={handleLogin} onTestCORS={testCORS} />
-                  )
-                }
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  isAuthenticated ? (
-                    <Dashboard
-                      onStartAnalysis={handleStartAnalysis}
-                      analysisStatus={analysisStatus}
-                      progress={progress}
-                      error={error}
-                    />
-                  ) : (
-                    <Navigate to="/" replace />
-                  )
-                }
-              />
-              <Route path="/unauthorized" element={<Unauthorized />} />
-              <Route path="/auth-error" element={<AuthError />} />
-              <Route
-                path="/startups"
-                element={
-                  isAuthenticated ? (
-                    <StartupsTable />
-                  ) : (
-                    <Navigate to="/" replace />
-                  )
-                }
-              />
-            </Routes>
-          </div>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <AppWrapper>
+                <Login onLogin={handleLogin} onTestCORS={testCORS} />
+              </AppWrapper>
+            )
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            isAuthenticated ? (
+              <AppWrapper>
+                <Dashboard
+                  onStartAnalysis={handleStartAnalysis}
+                  analysisStatus={analysisStatus}
+                  progress={progress}
+                  error={error}
+                />
+              </AppWrapper>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/unauthorized"
+          element={
+            <AppWrapper>
+              <Unauthorized />
+            </AppWrapper>
+          }
+        />
+        <Route
+          path="/auth-error"
+          element={
+            <AppWrapper>
+              <AuthError />
+            </AppWrapper>
+          }
+        />
+        <Route
+          path="/startups"
+          element={
+            isAuthenticated ? <StartupsTable /> : <Navigate to="/" replace />
+          }
+        />
+      </Routes>
+    </Router>
+  );
+}
+
+// New component to wrap the Email Analysis App content
+function AppWrapper({ children }) {
+  return (
+    <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
+      <div className="relative py-3 sm:max-w-xl sm:mx-auto">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-light-blue-500 shadow-lg transform -skew-y-6 sm:skew-y-0 sm:-rotate-6 sm:rounded-3xl"></div>
+        <div className="relative px-4 py-10 bg-white shadow-lg sm:rounded-3xl sm:p-20">
+          <h1 className="text-4xl font-bold mb-5 text-center text-gray-800">
+            Email Analysis App
+          </h1>
+          {children}
         </div>
       </div>
-    </Router>
+    </div>
   );
 }
 
