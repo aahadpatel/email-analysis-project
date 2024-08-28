@@ -15,7 +15,7 @@ from flask import current_app
 import aiohttp
 import cachetools
 from config.settings import MAX_EMAILS, INTERNAL_DOMAINS, BLACKLISTED_DOMAINS
-from .models import Company
+from .models import Company, User
 from .extensions import db
 
 client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -59,20 +59,21 @@ class ProgressTracker:
 progress_tracker = ProgressTracker()
 
 # Analyzes email threads to identify potential startup companies
-async def analyze_emails(credentials, user_email):
+async def analyze_emails(credentials, user_email, full_reanalysis=False):
     global progress_tracker
     current_app.logger.info("Starting email analysis")
     progress_tracker.update(status="Fetching emails")
     
     service = build('gmail', 'v1', credentials=credentials)
     
+    user = User.query.filter_by(email=user_email).first()
+    last_analyzed_email_id = None if full_reanalysis else (user.last_analyzed_email_id if user else None)
+    
     companies = defaultdict(lambda: {"threads": [], "interactions": 0})
     page_token = None
     processed_emails = 0
     processed_threads = 0
     skipped_threads = 0
-    # batch_size = 100  # Increased batch size for fetching threads
-    # email_batch_size = 25  # Number of emails to process in each batch
     batch_size = 10  # Temporary for testing
     email_batch_size = 5  # Temporary for testing
 
@@ -96,6 +97,11 @@ async def analyze_emails(credentials, user_email):
                 try:
                     thread_data = service.users().threads().get(userId='me', id=thread['id']).execute()
                     thread_messages = thread_data.get('messages', [])
+                    
+                    # Check if we've reached the last analyzed email
+                    if last_analyzed_email_id and thread_messages[0]['id'] == last_analyzed_email_id:
+                        current_app.logger.info("Reached last analyzed email, stopping analysis")
+                        break
                     
                     # Process emails in smaller batches
                     for i in range(0, len(thread_messages), email_batch_size):
@@ -149,10 +155,26 @@ async def analyze_emails(credentials, user_email):
                     current_app.logger.error(f"Error processing thread {thread['id']}: {str(e)}")
                     skipped_threads += 1
 
+                    # If we encounter an error with the last analyzed email, reset and continue
+                    if last_analyzed_email_id and thread['id'] == last_analyzed_email_id:
+                        current_app.logger.warning("Last analyzed email not accessible, continuing with full analysis")
+                        last_analyzed_email_id = None
+
             if 'nextPageToken' not in results:
                 current_app.logger.info("No more pages to fetch")
                 break
             page_token = results['nextPageToken']
+
+        # Update the user's last analyzed email ID and analysis date
+        if processed_emails > 0:
+            last_email_id = thread_messages[0]['id']
+            if user:
+                user.last_analyzed_email_id = last_email_id
+                user.last_analysis_date = datetime.utcnow()
+            else:
+                user = User(email=user_email, last_analyzed_email_id=last_email_id, last_analysis_date=datetime.utcnow())
+                db.session.add(user)
+            db.session.commit()
 
         current_app.logger.info(f"Processed {processed_threads} threads, skipped {skipped_threads}, {processed_emails} emails. Found {len(companies)} companies")
         progress_tracker.update(total_companies=len(companies), status="Analyzing companies", analyzed_companies=0)
@@ -379,8 +401,6 @@ def generate_csv(startup_companies, user_email):
                 company_contact = user_email
                 
                 db_company = Company.query.filter_by(name=company).first()
-                db_company = Company.query.filter_by(name=company).first()
-
                 if db_company:
                     db_company.last_interaction_date = datetime.strptime(last_date, "%Y-%m-%d").date()
                     db_company.total_interactions = total_interactions
@@ -435,12 +455,12 @@ def summarize_thread(thread):
     return summary
 
 # Processes emails to identify startups
-async def process_emails(credentials, user_email):
+async def process_emails(credentials, user_email, full_reanalysis=False):
     global progress_tracker
     progress_tracker.update(status="Starting", current_step="Initializing")
     try:
         current_app.logger.info("Starting email processing")
-        num_startups, csv_path = await analyze_emails(credentials, user_email)
+        num_startups, csv_path = await analyze_emails(credentials, user_email, full_reanalysis)
         current_app.logger.info(f"Email processing complete. Found {num_startups} startups.")
         progress_tracker.update(status="Completed", num_startups=num_startups)
         return num_startups, csv_path, None, progress_tracker

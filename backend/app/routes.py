@@ -8,9 +8,10 @@ from google.oauth2 import id_token
 from .email_analyzer import process_emails
 import asyncio
 from .email_analyzer import process_emails, progress_tracker
-from .models import Company
+from .models import Company, User
 from .extensions import db
 from sqlalchemy import text
+from flask_login import login_required, current_user, login_user, AnonymousUserMixin
 
 ALLOWED_DOMAINS = ['muckercapital.com', 'mucker.com']
 
@@ -92,6 +93,12 @@ def oauth2callback():
         session.modified = True  # Ensure the session is saved
 
         current_app.logger.info("Authentication successful")
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            user = User(email=email)
+            db.session.add(user)
+            db.session.commit()
+        login_user(user)
         return redirect('http://localhost:3000/dashboard')
     except Exception as e:
         current_app.logger.error(f"Error in OAuth callback: {str(e)}")
@@ -304,3 +311,16 @@ def get_startups():
     except Exception as e:
         current_app.logger.error(f"Error in get_startups route: {str(e)}")
         return jsonify({"error": "An error occurred while retrieving startups"}), 500
+
+@bp.route('/last-analysis-date', methods=['GET'])
+def get_last_analysis_date():
+    current_app.logger.info(f"Current user: {current_user}")
+    if isinstance(current_user, AnonymousUserMixin):
+        current_app.logger.warning("User not authenticated")
+        return jsonify({'error': 'User not authenticated'}), 401
+    
+    user = User.query.filter_by(email=current_user.email).first()
+    current_app.logger.info(f"User from database: {user}")
+    if user and user.last_analysis_date:
+        return jsonify({'last_analysis_date': user.last_analysis_date.isoformat()})
+    return jsonify({'last_analysis_date': None})

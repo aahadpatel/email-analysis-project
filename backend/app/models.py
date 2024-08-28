@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from .extensions import db
 from datetime import datetime
+from flask_login import UserMixin
 
 class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -13,3 +14,12 @@ class Company(db.Model):
 
     def __repr__(self):
         return f'<Company {self.name}>'
+    
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    last_analyzed_email_id = db.Column(db.String(255))
+    last_analysis_date = db.Column(db.DateTime)
+
+    def __repr__(self):
+        return f'<User {self.email}>'

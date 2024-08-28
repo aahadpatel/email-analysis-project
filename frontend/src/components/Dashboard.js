@@ -1,14 +1,33 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios";
 import ProgressGuide from "./ProgressGuide";
 
 function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
+  const [lastAnalysisDate, setLastAnalysisDate] = useState(null);
+
   useEffect(() => {
-    console.log("Progress prop updated:", progress);
-  }, [progress]);
-  console.log("Dashboard render - analysisStatus:", analysisStatus);
-  console.log("Dashboard render - progress:", progress);
-  console.log("Dashboard render - error:", error);
+    fetchLastAnalysisDate();
+  }, []);
+
+  const fetchLastAnalysisDate = async () => {
+    try {
+      const response = await axios.get(
+        "http://localhost:5001/last-analysis-date",
+        {
+          withCredentials: true,
+        }
+      );
+      setLastAnalysisDate(response.data.last_analysis_date);
+    } catch (err) {
+      console.error("Failed to fetch last analysis date:", err);
+    }
+  };
+
+  const handleStartAnalysis = (fullReanalysis = false) => {
+    onStartAnalysis(fullReanalysis);
+  };
+
   return (
     <div className="relative min-h-screen">
       <div className="space-y-6">
@@ -16,8 +35,16 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
           <h2 className="text-center text-2xl font-semibold mb-4">
             Welcome! You're authenticated.
           </h2>
+          {lastAnalysisDate && (
+            <p className="text-center text-lg">
+              Last analysis date:{" "}
+              <span className="font-semibold">
+                {new Date(lastAnalysisDate).toLocaleString()}
+              </span>
+            </p>
+          )}
           <button
-            onClick={onStartAnalysis}
+            onClick={() => handleStartAnalysis(false)}
             disabled={
               analysisStatus === "starting" || analysisStatus === "in_progress"
             }
@@ -25,7 +52,16 @@ function Dashboard({ onStartAnalysis, analysisStatus, progress, error }) {
           >
             {analysisStatus === "starting" || analysisStatus === "in_progress"
               ? "Analysis in Progress..."
-              : "Analyze Emails"}
+              : "Analyze New Emails"}
+          </button>
+          <button
+            onClick={() => handleStartAnalysis(true)}
+            disabled={
+              analysisStatus === "starting" || analysisStatus === "in_progress"
+            }
+            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
+          >
+            Full Reanalysis
           </button>
         </div>
         {progress && (
