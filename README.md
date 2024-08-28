@@ -2,16 +2,15 @@
 
 ## Overview
 
-The Email Analyzer is a tool designed to help venture capital firms identify potential startup investments by analyzing email communications since existing CRMs aren't ideal. Built with a Python Flask backend and a React frontend, this application provides a user-friendly interface for processing emails and generating a CSV. The output CSV is structured with the following columns:
+The Email Analyzer is a tool designed to help venture capital firms identify potential startup investments by analyzing email communications since existing CRMs aren't ideal. Built with a Python Flask backend and a React frontend, this application provides a user-friendly interface for processing emails.
 
-- **First Interaction Date:** The date of the first interaction with the startup.
-- **Last Interaction Date:** The date of the last interaction with the startup.
 - **Company:** The name of the startup.
-- **Interactions:** The number of interactions with the startup.
-- **Last Interaction:** A snippet of the last interaction with the startup.
-- **AI Explanation:** A summary of the AI's reasoning for why the company we're speaking to is a startup.
-
-I'll most likely add database functionality in the future, but for now the output is just saved to a CSV. I'm not currently storing any data.
+- **First Interaction:** The date of the first interaction with the startup.
+- **Last Interaction:** The date of the last interaction with the startup.
+- **Total Interactions:** The number of interactions with the startup.
+- **Company Contact:** The user who is the point of contact. In this case, it's simply the signed-in user.
+- **Analysis Date:** The last date this thread was analyzed.
+- **Actions:** If the user determines that this company is not a startup that the fund is talking to for potential investment and/or wants to delete this company from the database, then the user has the option to do so by clicking 'Delete'
 
 ## Features
 
@@ -25,6 +24,7 @@ I'll most likely add database functionality in the future, but for now the outpu
 
 - **Backend:** Python, Flask, Google Gmail API, OpenAI API
 - **Frontend:** JavaScript, React
+- **Database:** Postgres
 - **Data Processing:** AsyncIO for asynchronous operations
 - **AI Model:** OpenAI's GPT-3.5 Turbo
 
