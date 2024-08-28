@@ -299,12 +299,13 @@ def get_startups():
     try:
         startups = Company.query.all()
         startup_list = [{
+            'id': s.id,
             'name': s.name,
             'first_interaction_date': s.first_interaction_date.strftime('%Y-%m-%d'),
             'last_interaction_date': s.last_interaction_date.strftime('%Y-%m-%d'),
             'total_interactions': s.total_interactions,
             'company_contact': s.company_contact,
-            'analysis_date': s.analysis_date.strftime('%Y-%m-%d %H:%M:%S')
+            'analysis_date': s.analysis_date.strftime('%Y-%m-%d')  # Format changed here
         } for s in startups]
         current_app.logger.info(f"Retrieved {len(startup_list)} startups from the database")
         return jsonify(startup_list)
