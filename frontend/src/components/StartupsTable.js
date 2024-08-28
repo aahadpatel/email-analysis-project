@@ -11,6 +11,7 @@ const StartupsTable = () => {
   const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [totalStartups, setTotalStartups] = useState(0);
 
   useEffect(() => {
     const fetchStartups = async () => {
@@ -18,13 +19,13 @@ const StartupsTable = () => {
         const response = await axios.get("http://localhost:5001/startups", {
           withCredentials: true,
         });
-        // Ensure each startup object has an id
         const startupsWithIds = response.data.map((startup) => ({
           ...startup,
-          id: startup.id || startup.name, // Use name as fallback if id is not available
+          id: startup.id || startup.name,
         }));
         setStartups(startupsWithIds);
         setFilteredStartups(startupsWithIds);
+        setTotalStartups(startupsWithIds.length);
         setLoading(false);
       } catch (err) {
         setError("Failed to fetch startups");
@@ -42,14 +43,12 @@ const StartupsTable = () => {
   const filterAndSortStartups = () => {
     let filtered = [...startups];
 
-    // Apply interaction filter
     if (interactionFilter !== "") {
       filtered = filtered.filter(
         (startup) => startup.total_interactions >= parseInt(interactionFilter)
       );
     }
 
-    // Apply sorting
     filtered.sort((a, b) => {
       if (a[sortColumn] < b[sortColumn])
         return sortDirection === "asc" ? -1 : 1;
@@ -87,10 +86,14 @@ const StartupsTable = () => {
           withCredentials: true,
         }
       );
-      setStartups(startups.filter((s) => s.name !== deleteConfirmation.name));
+      const updatedStartups = startups.filter(
+        (s) => s.name !== deleteConfirmation.name
+      );
+      setStartups(updatedStartups);
       setFilteredStartups(
         filteredStartups.filter((s) => s.name !== deleteConfirmation.name)
       );
+      setTotalStartups(updatedStartups.length);
       setDeleteConfirmation(null);
     } catch (err) {
       console.error("Failed to delete startup:", err);
@@ -117,6 +120,11 @@ const StartupsTable = () => {
           >
             Back to Dashboard
           </Link>
+          <div className="mb-4">
+            <p>
+              Total number of startups: <strong>{totalStartups}</strong>
+            </p>
+          </div>
           <div className="mb-4">
             <label htmlFor="interactionFilter" className="mr-2">
               Minimum Interactions:
