@@ -105,6 +105,48 @@ const StartupsTable = () => {
     setDeleteConfirmation(null);
   };
 
+  const extractCSV = () => {
+    // Define the headers
+    const headers = [
+      "Name",
+      "First Interaction Date",
+      "Last Interaction Date",
+      "Total Interactions",
+      "Company Contact",
+      "Analysis Date",
+    ];
+
+    // Convert the data to CSV format
+    const csvContent = [
+      headers.join(","), // Add headers as the first row
+      ...filteredStartups.map((startup) =>
+        [
+          startup.name,
+          startup.first_interaction_date,
+          startup.last_interaction_date,
+          startup.total_interactions,
+          startup.company_contact,
+          startup.analysis_date,
+        ].join(",")
+      ),
+    ].join("\n");
+
+    // Create a Blob with the CSV content
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+
+    // Create a download link and trigger the download
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "startups_data.csv");
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error)
     return <div className="text-center mt-8 text-red-600">{error}</div>;
@@ -114,16 +156,19 @@ const StartupsTable = () => {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <h1 className="text-3xl font-bold mb-6">Analyzed Startups</h1>
-          <Link
-            to="/dashboard"
-            className="mb-4 inline-block bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            Back to Dashboard
-          </Link>
-          <div className="mb-4">
-            <p>
-              Total number of startups: <strong>{totalStartups}</strong>
-            </p>
+          <div className="flex justify-between items-center mb-4">
+            <Link
+              to="/dashboard"
+              className="inline-block bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Back to Dashboard
+            </Link>
+            <button
+              onClick={extractCSV}
+              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Extract CSV
+            </button>
           </div>
           <div className="mb-4">
             <label htmlFor="interactionFilter" className="mr-2">
@@ -136,6 +181,11 @@ const StartupsTable = () => {
               onChange={(e) => setInteractionFilter(e.target.value)}
               className="border rounded px-2 py-1"
             />
+          </div>
+          <div className="mb-4">
+            <p>
+              Total number of startups: <strong>{totalStartups}</strong>
+            </p>
           </div>
           <div className="mt-4 overflow-x-auto shadow-md sm:rounded-lg">
             <table className="w-full text-sm text-left text-gray-500">
