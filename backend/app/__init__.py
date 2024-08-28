@@ -6,12 +6,11 @@ from .extensions import db
 from flask_login import LoginManager  # Add this import
 
 load_dotenv()
-
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
     
     # Configure CORS
-    CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}}, supports_credentials=True)
+    CORS(app, supports_credentials=True)
     
     # Use the secret key from the environment variable
     app.secret_key = os.getenv('FLASK_SECRET_KEY')
@@ -46,7 +45,6 @@ def create_app():
     # Initialize Flask-Login
     login_manager = LoginManager()
     login_manager.init_app(app)
-
     @login_manager.user_loader
     def load_user(user_id):
         from .models import User  # Import here to avoid circular imports

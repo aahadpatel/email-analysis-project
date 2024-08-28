@@ -10,6 +10,7 @@ const StartupsTable = () => {
   const [interactionFilter, setInteractionFilter] = useState("");
   const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
 
   useEffect(() => {
     const fetchStartups = async () => {
@@ -17,8 +18,13 @@ const StartupsTable = () => {
         const response = await axios.get("http://localhost:5001/startups", {
           withCredentials: true,
         });
-        setStartups(response.data);
-        setFilteredStartups(response.data);
+        // Ensure each startup object has an id
+        const startupsWithIds = response.data.map((startup) => ({
+          ...startup,
+          id: startup.id || startup.name, // Use name as fallback if id is not available
+        }));
+        setStartups(startupsWithIds);
+        setFilteredStartups(startupsWithIds);
         setLoading(false);
       } catch (err) {
         setError("Failed to fetch startups");
@@ -62,6 +68,38 @@ const StartupsTable = () => {
       setSortColumn(column);
       setSortDirection("asc");
     }
+  };
+
+  const handleDeleteClick = (startup) => {
+    setDeleteConfirmation(startup);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      if (!deleteConfirmation || !deleteConfirmation.name) {
+        throw new Error("Invalid startup selected for deletion");
+      }
+      await axios.delete(
+        `http://localhost:5001/startups/${encodeURIComponent(
+          deleteConfirmation.name
+        )}`,
+        {
+          withCredentials: true,
+        }
+      );
+      setStartups(startups.filter((s) => s.name !== deleteConfirmation.name));
+      setFilteredStartups(
+        filteredStartups.filter((s) => s.name !== deleteConfirmation.name)
+      );
+      setDeleteConfirmation(null);
+    } catch (err) {
+      console.error("Failed to delete startup:", err);
+      setError(`Failed to delete startup: ${err.message}`);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmation(null);
   };
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;
@@ -149,12 +187,15 @@ const StartupsTable = () => {
                     {sortColumn === "analysis_date" &&
                       (sortDirection === "asc" ? "▲" : "▼")}
                   </th>
+                  <th scope="col" className="px-6 py-3">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {filteredStartups.map((startup, index) => (
+                {filteredStartups.map((startup) => (
                   <tr
-                    key={index}
+                    key={startup.id}
                     className="bg-white border-b hover:bg-gray-50"
                   >
                     <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
@@ -169,11 +210,44 @@ const StartupsTable = () => {
                     <td className="px-6 py-4">{startup.total_interactions}</td>
                     <td className="px-6 py-4">{startup.company_contact}</td>
                     <td className="px-6 py-4">{startup.analysis_date}</td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => handleDeleteClick(startup)}
+                        className="font-medium text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {deleteConfirmation && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <h3 className="text-lg font-bold">Confirm Deletion</h3>
+                <p className="mt-2">
+                  Are you sure you want to delete {deleteConfirmation.name}?
+                </p>
+                <div className="mt-3 flex justify-end space-x-2">
+                  <button
+                    onClick={cancelDelete}
+                    className="px-4 py-2 bg-gray-300 text-black rounded hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

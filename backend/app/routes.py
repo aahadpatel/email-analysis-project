@@ -324,3 +324,19 @@ def get_last_analysis_date():
     if user and user.last_analysis_date:
         return jsonify({'last_analysis_date': user.last_analysis_date.isoformat()})
     return jsonify({'last_analysis_date': None})
+
+@bp.route('/startups/<string:startup_id>', methods=['DELETE'])
+def delete_startup(startup_id):
+    try:
+        startup = Company.query.filter_by(name=startup_id).first()
+        if startup is None:
+            return jsonify({"error": "Startup not found"}), 404
+        
+        db.session.delete(startup)
+        db.session.commit()
+        
+        return jsonify({"message": "Startup deleted successfully"}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error deleting startup: {str(e)}")
+        db.session.rollback()
+        return jsonify({"error": "An error occurred while deleting the startup"}), 500
