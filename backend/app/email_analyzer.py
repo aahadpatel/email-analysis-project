@@ -237,6 +237,9 @@ def extract_company_name(email_data):
         sender_domain = email_data['sender_email'].split('@')[1]
         recipient_domain = email_data['recipient_email'].split('@')[1]
         
+        if sender_domain.endswith('.vc') or recipient_domain.endswith('.vc'):
+            return None
+        
         if sender_domain in INTERNAL_DOMAINS:
             return recipient_domain if recipient_domain not in INTERNAL_DOMAINS else None
         elif recipient_domain in INTERNAL_DOMAINS:
