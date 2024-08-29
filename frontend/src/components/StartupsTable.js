@@ -271,7 +271,14 @@ const StartupsTable = () => {
                     className="bg-white border-b hover:bg-gray-50"
                   >
                     <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
-                      {startup.name}
+                      <a
+                        href={`https://${startup.name}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {startup.name}
+                      </a>
                     </td>
                     <td className="px-6 py-4">
                       {startup.first_interaction_date}
