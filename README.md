@@ -162,3 +162,66 @@ If you'd like to contribute to this project, please fork the repository and subm
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Troubleshooting
+
+If you encounter issues running the Flask application, particularly with importing modules like `flask_login`, follow these steps:
+
+1. Ensure you're using the correct virtual environment:
+
+   ```bash
+   source venv/bin/activate
+   ```
+
+2. Upgrade pip in your virtual environment:
+
+   ```bash
+   pip install --upgrade pip
+   ```
+
+3. Reinstall the requirements:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. If you still encounter issues with the `flask` command, use the Flask executable in your virtual environment:
+
+   ```bash
+   venv/bin/flask run --port=5001
+   ```
+
+5. Alternatively, you can run the application using Python directly. Create a `run.py` file in the project root with the following content:
+
+   ```python
+   from app import create_app
+
+   app = create_app()
+
+   if __name__ == '__main__':
+       app.run(port=5001, debug=True)
+   ```
+
+   Then run it with:
+
+   ```bash
+   python run.py
+   ```
+
+6. If you're still having issues, check your Python path:
+
+   ```bash
+   python -c "import sys; print('\n'.join(sys.path))"
+   ```
+
+   Ensure that your virtual environment's site-packages directory is listed.
+
+7. Verify that all required packages are installed:
+
+   ```bash
+   pip list
+   ```
+
+   Check that `Flask-Login` and other required packages are listed.
+
+If you continue to experience issues after following these steps, please check the 'Issues' section of the project repository or reach out to the project maintainers for further assistance.

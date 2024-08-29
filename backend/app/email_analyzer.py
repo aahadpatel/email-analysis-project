@@ -251,6 +251,8 @@ def extract_company_name(email_data):
 async def analyze_companies(companies):
     global progress_tracker
     company_summaries = []
+    startup_companies = {}
+    startup_count = 0
     for i, (company_name, data) in enumerate(companies.items(), 1):
         current_app.logger.info(f"Analyzing company: {company_name}")
         summary = f"Company: {company_name}\n"
@@ -305,32 +307,29 @@ async def analyze_companies(companies):
         ai_response = response.choices[0].message.content.strip()
         current_app.logger.info("Received response from OpenAI")
         
-        startup_companies = {}
         for company_analysis in ai_response.split('\n\n'):
             lines = company_analysis.split('\n')
-            print("lines:", lines)
             if len(lines) >= 2:
                 ai_company_name = ' '.join(lines[0].replace('Company:', '').strip().strip('*').split()).lower()
-                ai_company_name = re.sub(r'^\d+\.\s*', '', ai_company_name)  # Remove leading numbers and dots
-                ai_company_name = ai_company_name.strip('*')  # Remove any remaining asterisks
+                ai_company_name = re.sub(r'^\d+\.\s*', '', ai_company_name)
+                ai_company_name = ai_company_name.strip('*').strip(':')  # Remove colon as well
                 is_startup = 'yes' in lines[1].strip().lower()
-                print("company:", ai_company_name)
-                print("is_startup:", is_startup)
                 current_app.logger.info(f"AI analysis for {ai_company_name}: {'Startup' if is_startup else 'Not a startup'}")
                 if is_startup:
                     matching_company = next((name for name in companies.keys() if ai_company_name in name.lower()), None)
                     if matching_company:
                         startup_companies[matching_company] = companies[matching_company].copy()
                         startup_companies[matching_company]['ai_explanation'] = '\n'.join(lines[1:])
-                        # Store last email of each thread
                         startup_companies[matching_company]['last_emails'] = [
                             thread[-1] for thread in startup_companies[matching_company]['threads']
                         ]
                         current_app.logger.info(f"Identified startup: {matching_company}")
+                        startup_count += 1
                     else:
                         current_app.logger.warning(f"Identified startup {ai_company_name} not found in original companies list")
 
-        current_app.logger.info(f"Identified {len(startup_companies)} potential startups")
+        current_app.logger.info(f"Identified {startup_count} potential startups")
+        progress_tracker.update(num_startups=startup_count)
         return startup_companies
     except Exception as e:
         current_app.logger.error(f"Error in GPT analysis: {str(e)}")

@@ -1,9 +1,9 @@
 from flask import Flask
 from flask_cors import CORS
+from flask_login import LoginManager  # Move this import to the top
 from dotenv import load_dotenv
 import os
 from .extensions import db
-from flask_login import LoginManager  # Add this import
 
 load_dotenv()
 def create_app():
